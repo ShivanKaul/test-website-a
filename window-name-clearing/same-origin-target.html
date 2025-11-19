@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>window.name same-origin target – Origin A</title>
+<body>
+  <h1>Same-origin target (Origin A)</h1>
+
+  <p>Origin: <span id="origin"></span></p>
+  <p>window.name seen here: "<span id="name"></span>"</p>
+  <p id="result"></p>
+
+  <button id="back">Back to index</button>
+
+  <script>
+    document.getElementById('origin').textContent = location.origin;
+
+    const nameValue = window.name;
+    document.getElementById('name').textContent = nameValue;
+
+    const result = document.getElementById('result');
+
+    if (nameValue === 'same-origin-test') {
+      result.textContent =
+        'Result: window.name persisted across same-origin navigation.';
+    } else if (nameValue === '') {
+      result.textContent =
+        'Result: window.name was cleared on same-origin navigation.';
+    } else {
+      result.textContent =
+        'Result: window.name changed unexpectedly to "' + nameValue + '".';
+    }
+
+    document.getElementById('back').onclick = () => {
+      location.href = '/';
+    };
+  </script>
+</body>
