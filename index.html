@@ -1,8 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>window.name test – origin A</title>
+<title>window.name test – Origin A</title>
 <body>
-  <h1>window.name test – origin A</h1>
+  <h1>window.name test – Origin A</h1>
 
   <p>Origin: <span id="origin"></span></p>
   <p>Current window.name: "<span id="currentName"></span>"</p>
@@ -11,9 +11,9 @@
   <button id="crossOriginBtn">Test cross-origin navigation</button>
 
   <script>
-    // TODO: change these to the real URLs you host on.
     const sameOriginTargetUrl = '/same-origin-target.html';
-    const crossOriginTargetUrl = 'http://b.test:8001/cross-origin-target.html';
+    const crossOriginTargetUrl =
+      'https://test-website-b.pages.dev/cross-origin-target.html';
 
     document.getElementById('origin').textContent = location.origin;
     document.getElementById('currentName').textContent = window.name;
