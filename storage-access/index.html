@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Storage Access API — Harness (Site A)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; line-height: 1.45; margin: 0; padding: 18px; }
+    h1 { margin: 0 0 10px 0; }
+    p { margin: 8px 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    button,a.btn {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(127,127,127,0.35);
+      background: rgba(127,127,127,0.12);
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    button:hover,a.btn:hover { background: rgba(127,127,127,0.18); }
+    iframe { width: 100%; height: 520px; border: 1px solid rgba(127,127,127,0.35); border-radius: 14px; background: rgba(127,127,127,0.04); }
+    pre { padding: 12px; border-radius: 10px; overflow: auto; background: rgba(127,127,127,0.14); margin: 0; }
+    .ok { border-color: rgba(0,160,0,0.6); }
+    .warn { border-color: rgba(200,140,0,0.7); }
+  </style>
+</head>
+<body>
+  <h1>Storage Access API test harness (Site A)</h1>
+
+  <div class="card" id="context"></div>
+
+  <div class="card">
+    <p><b>Flow (minimal):</b></p>
+    <ol>
+      <li>Click <b>Open B (auto-seed)</b> once. (This sets known first-party cookie + localStorage on B.)</li>
+      <li>Then click <b>Run full test</b> inside the iframe (one click; required for user activation).</li>
+    </ol>
+    <a class="btn" id="openB" target="_blank" rel="noopener">Open B (auto-seed)</a>
+    <button id="reload">Reload iframe</button>
+  </div>
+
+  <div class="card">
+    <iframe id="frame" allow="storage-access"></iframe>
+  </div>
+
+  <div class="card">
+    <p><b>Results (from iframe)</b></p>
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    const ORIGIN_A = "https://test-website-a.pages.dev";
+    const ORIGIN_B = "https://test-website-b.pages.dev";
+
+    const frame = document.getElementById("frame");
+    const logEl = document.getElementById("log");
+
+    function log(line) {
+      logEl.textContent += line + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function heuristicSite(origin) {
+      try {
+        const u = new URL(origin);
+        const parts = u.hostname.split(".").filter(Boolean);
+        const last2 = parts.slice(-2).join(".");
+        // Heuristic: treat pages.dev/github.io/etc as multi-part suffixes.
+        const multi = new Set(["pages.dev","github.io","netlify.app","vercel.app","workers.dev"]);
+        const reg = multi.has(last2) ? parts.slice(-3).join(".") : last2;
+        return u.protocol + "//" + reg;
+      } catch {
+        return origin;
+      }
+    }
+
+    const ctx = document.getElementById("context");
+    const siteA = heuristicSite(ORIGIN_A);
+    const siteB = heuristicSite(ORIGIN_B);
+    const crossSite = siteA !== siteB;
+
+    ctx.className = "card " + (crossSite ? "ok" : "warn");
+    ctx.innerHTML = [
+      `<div>This origin: <span class="mono">${location.origin}</span></div>`,
+      `<div>Iframe origin: <span class="mono">${ORIGIN_B}</span></div>`,
+      `<div>Heuristic schemeful site(A): <span class="mono">${siteA}</span></div>`,
+      `<div>Heuristic schemeful site(B): <span class="mono">${siteB}</span></div>`,
+      crossSite
+        ? `<div><b>Heuristic says cross-site.</b> Good.</div>`
+        : `<div><b>Heuristic says same-site.</b> If you’re using raw *.pages.dev hostnames without custom domains, SAA testing may be meaningless.</div>`
+    ].join("");
+
+    document.getElementById("openB").href = ORIGIN_B + "/?seed=1";
+    function loadFrame() {
+      frame.src = ORIGIN_B + "/?embed=1";
+      log("[parent] iframe loaded: " + frame.src);
+    }
+    document.getElementById("reload").addEventListener("click", loadFrame);
+
+    window.addEventListener("message", (ev) => {
+      if (ev.origin !== ORIGIN_B) return;
+      const data = ev.data;
+      if (!data || typeof data !== "object") return;
+
+      if (data.type === "line") log(data.line);
+      if (data.type === "summary") {
+        log("—".repeat(32));
+        log("[SUMMARY]");
+        log(JSON.stringify(data.summary, null, 2));
+        log("—".repeat(32));
+      }
+    });
+
+    loadFrame();
+  </script>
+</body>
+</html>
+
