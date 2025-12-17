@@ -3,47 +3,51 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cookie Access Test Site A</title>
+  <title>Third party cookies test website A</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; line-height: 1.35; }
     .card { border: 1px solid #333; border-radius: 12px; padding: 16px; max-width: 980px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    input { padding: 10px 12px; border-radius: 10px; border: 1px solid #333; width: min(640px, 100%); }
+    input { padding: 10px 12px; border-radius: 10px; border: 1px solid #333; width: min(720px, 100%); }
     button { padding: 10px 12px; border-radius: 10px; border: 1px solid #333; background: #fff; cursor: pointer; }
-    iframe { width: 100%; height: 420px; border: 1px solid #333; border-radius: 12px; margin-top: 12px; }
+    button:active { transform: translateY(1px); }
+    iframe { width: 100%; height: 440px; border: 1px solid #333; border-radius: 12px; margin-top: 12px; }
     code { background: #f4f4f4; padding: 2px 6px; border-radius: 6px; }
     .small { font-size: 13px; opacity: 0.9; }
     .hint { background: #f8f8ff; border: 1px solid #cfcfff; padding: 10px; border-radius: 12px; }
+    .status { margin-top: 10px; font-size: 13px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Site A embeds Site B in an iframe</h1>
+    <h1>Website A embeds Website B in an iframe</h1>
 
     <div class="hint">
       <p class="small">
         Flow:
-        1) Open Site B top level and set cookie C.
-        2) Paste that exact C value below.
-        3) Reload the iframe and read the result inside it.
+        1) Open Website B (top level) and set cookie C.
+        2) Copy the cookie C value shown on B.
+        3) Paste it here and reload the iframe.
+        4) The iframe on B will report whether it can read the same cookie value.
       </p>
     </div>
 
     <p><span class="small">This page origin:</span> <code id="aorigin"></code></p>
 
-    <div class="row">
-      <label>
-        <div class="small">Site B origin (edit if needed)</div>
-        <input id="borigin" value="https://test-website-b.pages.dev/third-party-cookies/" />
-      </label>
+    <div class="row" style="margin-top: 10px;">
+      <button id="openb">Open Website B</button>
+      <span class="small"><code id="burl"></code></span>
     </div>
 
-    <div class="row" style="margin-top: 10px;">
+    <div style="margin-top: 14px;">
       <label>
-        <div class="small">Expected C value (copy from Site B top level)</div>
+        <div class="small">Expected C value (copy from Website B top level)</div>
         <input id="expected" placeholder="top.2025-01-01T00:00:00.000Z.abcdef" />
+        <br>
       </label>
-      <button id="reload">Reload iframe</button>
+      <div class="row" style="margin-top: 10px;">
+        <button id="reload">Reload iframe</button>
+      </div>
     </div>
 
     <p class="small" style="margin-top: 10px;">
@@ -51,22 +55,37 @@
       <code id="iframeurl">(not set yet)</code>
     </p>
 
-    <iframe id="frame" title="Site B iframe"></iframe>
+    <div class="status" id="status"></div>
+
+    <iframe id="frame" title="Website B iframe"></iframe>
   </div>
 
 <script>
+  const B_HOME = "https://test-website-b.pages.dev/third-party-cookies/";
+  const B_IFRAME = "https://test-website-b.pages.dev/third-party-cookies/iframe.html";
+
   function setIframe() {
-    const b = document.getElementById("borigin").value.trim().replace(/\/+$/, "");
     const expected = document.getElementById("expected").value.trim();
 
-    const url = new URL(b + "/cookieaccess/iframe.html");
+    const url = new URL(B_IFRAME);
     if (expected) url.searchParams.set("expected", expected);
 
     document.getElementById("iframeurl").textContent = url.toString();
     document.getElementById("frame").src = url.toString();
+    document.getElementById("status").textContent = "";
   }
 
   document.getElementById("aorigin").textContent = location.origin;
+  document.getElementById("burl").textContent = B_HOME;
+
+  document.getElementById("openb").addEventListener("click", () => {
+    const w = window.open(B_HOME, "_blank", "noopener,noreferrer");
+    if (!w) {
+      document.getElementById("status").textContent =
+        "Popup was blocked. Please allow popups for this site, or open Website B manually.";
+    }
+  });
+
   document.getElementById("reload").addEventListener("click", setIframe);
 
   setIframe();
