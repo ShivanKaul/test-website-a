@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>De-AMP Sec-Fetch-Site Bypass Test</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; margin: 0 auto; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; }
+    a { color: #0066cc; }
+    ol { margin: 8px 0 0 22px; }
+  </style>
+</head>
+<body>
+  <h1>De-AMP Sec-Fetch-Site Bypass Test</h1>
+  <p>Site A: <code>test-website-a.pages.dev</code></p>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>When Brave's De-AMP feature redirects from a cross-site AMP page back to this
+    origin, the <code>Sec-Fetch-Site</code> header should be <code>cross-site</code>
+    (because the redirect chain included a cross-site URL).</p>
+    <p>If De-AMP erases the cross-site hop from the redirect chain, the header will
+    incorrectly be <code>same-origin</code>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Steps</h2>
+    <ol>
+      <li>Click the <b>cross-site AMP link</b> below.</li>
+      <li>Brave should detect the AMP page on Site B and De-AMP redirect you to
+      Site A's header inspector.</li>
+      <li>Check the <code>Sec-Fetch-Site</code> value on the results page.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Test Links</h2>
+    <p><a href="https://test-website-b.pages.dev/de-amp/amp-page.html">1. Cross-site AMP page (Site B) -- triggers De-AMP redirect to Site A</a></p>
+    <p><a href="https://test-website-a.pages.dev/de-amp/show-headers">2. Direct same-origin link (control) -- should show same-origin</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <th style="text-align:left;padding:6px;">Link</th>
+        <th style="text-align:left;padding:6px;">Expected Sec-Fetch-Site</th>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">Link 1 (via De-AMP from Site B)</td>
+        <td style="padding:6px;"><code>cross-site</code></td>
+      </tr>
+      <tr>
+        <td style="padding:6px;">Link 2 (direct same-origin)</td>
+        <td style="padding:6px;"><code>same-origin</code></td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>
