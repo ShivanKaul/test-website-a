@@ -1,0 +1,4 @@
+{
+  "title": "window.name Clearing",
+  "description": "Tests whether the browser clears window.name on cross-origin navigations."
+}

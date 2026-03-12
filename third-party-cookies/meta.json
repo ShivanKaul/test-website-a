@@ -1,0 +1,4 @@
+{
+  "title": "Third-Party Cookies",
+  "description": "Tests whether a cross-site iframe can read cookies set when its origin was top-level."
+}

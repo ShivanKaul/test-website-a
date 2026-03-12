@@ -1,0 +1,4 @@
+{
+  "title": "De-AMP Sec-Fetch-Site Bypass",
+  "description": "Tests whether De-AMP redirects preserve the cross-site hop in the Sec-Fetch-Site header."
+}

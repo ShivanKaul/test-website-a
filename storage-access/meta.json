@@ -1,0 +1,4 @@
+{
+  "title": "Storage Access API",
+  "description": "Tests whether a cross-site iframe can regain access to its first-party cookies via the Storage Access API."
+}
