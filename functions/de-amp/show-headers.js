@@ -21,34 +21,6 @@ export async function onRequestGet(context) {
 
   const secFetchSite = captured['sec-fetch-site'] || '(not present)';
 
-  const referer = captured['referer'] || '';
-  const cameFromSiteB = referer.includes('test-website-b');
-
-  let verdictClass, verdictLabel, verdictMsg;
-  if (secFetchSite === 'cross-site') {
-    verdictClass = 'pass';
-    verdictLabel = 'PASS';
-    verdictMsg = 'Sec-Fetch-Site is <code>cross-site</code> (correct behavior)';
-  } else if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') {
-    if (cameFromSiteB) {
-      verdictClass = 'fail';
-      verdictLabel = 'FAIL -- BUG CONFIRMED';
-      verdictMsg = `Sec-Fetch-Site is <code>${secFetchSite}</code> (should be <code>cross-site</code> since you arrived via De-AMP from Site B)`;
-    } else {
-      verdictClass = 'info';
-      verdictLabel = 'EXPECTED';
-      verdictMsg = `Sec-Fetch-Site is <code>${secFetchSite}</code> (this is normal for a same-origin navigation -- use the <a href="/de-amp/">test page</a> to run the actual De-AMP test)`;
-    }
-  } else if (secFetchSite === 'none') {
-    verdictClass = 'info';
-    verdictLabel = 'INFO';
-    verdictMsg = 'Sec-Fetch-Site is <code>none</code> (direct navigation / typed URL)';
-  } else {
-    verdictClass = 'info';
-    verdictLabel = 'INFO';
-    verdictMsg = `Sec-Fetch-Site is <code>${secFetchSite}</code>`;
-  }
-
   let headerRows = '';
   for (const [name, value] of Object.entries(captured).sort()) {
     headerRows += `<tr><td>${name}</td><td><code>${value}</code></td></tr>\n`;
@@ -71,19 +43,17 @@ export async function onRequestGet(context) {
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid rgba(127,127,127,0.28); padding: 8px 12px; text-align: left; }
     th { background: rgba(127,127,127,0.1); }
-    .pass { border-color: rgba(0,160,0,0.7); background: rgba(0,160,0,0.08); }
-    .fail { border-color: rgba(200,0,0,0.7); background: rgba(200,0,0,0.08); }
-    .info { border-color: rgba(200,140,0,0.7); background: rgba(200,140,0,0.08); }
-    .verdict { font-size: 1.2em; }
+    .value { font-size: 1.3em; }
     a { color: #0066cc; }
   </style>
 </head>
 <body>
   <h1>Header Inspector -- De-AMP Test</h1>
-  <p>Site A: <code>test-website-a.pages.dev</code></p>
 
-  <div class="card ${verdictClass}">
-    <p class="verdict"><strong>${verdictLabel}:</strong> ${verdictMsg}</p>
+  <div class="card">
+    <p><strong>Sec-Fetch-Site:</strong> <code class="value">${secFetchSite}</code></p>
+    <p>If you arrived via the De-AMP redirect from Site B, this should be <code>cross-site</code>.<br>
+    If you navigated here directly from Site A, <code>same-origin</code> is expected.</p>
   </div>
 
   <div class="card">
