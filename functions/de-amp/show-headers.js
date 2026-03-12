@@ -21,15 +21,24 @@ export async function onRequestGet(context) {
 
   const secFetchSite = captured['sec-fetch-site'] || '(not present)';
 
+  const referer = captured['referer'] || '';
+  const cameFromSiteB = referer.includes('test-website-b');
+
   let verdictClass, verdictLabel, verdictMsg;
   if (secFetchSite === 'cross-site') {
     verdictClass = 'pass';
     verdictLabel = 'PASS';
     verdictMsg = 'Sec-Fetch-Site is <code>cross-site</code> (correct behavior)';
   } else if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') {
-    verdictClass = 'fail';
-    verdictLabel = 'FAIL -- BUG CONFIRMED';
-    verdictMsg = `Sec-Fetch-Site is <code>${secFetchSite}</code> (should be <code>cross-site</code> if you arrived via De-AMP from Site B)`;
+    if (cameFromSiteB) {
+      verdictClass = 'fail';
+      verdictLabel = 'FAIL -- BUG CONFIRMED';
+      verdictMsg = `Sec-Fetch-Site is <code>${secFetchSite}</code> (should be <code>cross-site</code> since you arrived via De-AMP from Site B)`;
+    } else {
+      verdictClass = 'info';
+      verdictLabel = 'EXPECTED';
+      verdictMsg = `Sec-Fetch-Site is <code>${secFetchSite}</code> (this is normal for a same-origin navigation -- use the <a href="/de-amp/">test page</a> to run the actual De-AMP test)`;
+    }
   } else if (secFetchSite === 'none') {
     verdictClass = 'info';
     verdictLabel = 'INFO';
