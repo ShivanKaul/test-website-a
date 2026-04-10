@@ -1,1 +1,1 @@
-/server-redirect/go  https://lobste.rs  302
+/server-redirect/go  /server-redirect/headers  302

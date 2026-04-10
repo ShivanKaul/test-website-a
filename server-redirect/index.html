@@ -19,12 +19,14 @@
   <div class="card">
     <h2>What this tests</h2>
     <p>Clicking the link below navigates to a same-origin path that returns a
-    <code>302</code> server-side redirect to <code>https://lobste.rs</code>.</p>
+    <code>302</code> server-side redirect to a header inspector page. The
+    inspector displays all HTTP request headers and JS properties
+    (<code>navigator.userAgent</code>, <code>navigator.userAgentData.brands</code>).</p>
   </div>
 
   <div class="card">
     <h2>Test Link</h2>
-    <p><a href="/server-redirect/go">Navigate to lobste.rs via server-side 302 redirect</a></p>
+    <p><a href="/server-redirect/go">Navigate to header inspector via server-side 302 redirect</a></p>
   </div>
 </body>
 </html>
