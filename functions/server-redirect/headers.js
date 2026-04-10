@@ -18,9 +18,10 @@ export async function onRequestGet(context) {
     body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; margin: 0 auto; }
     .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
     code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid rgba(127,127,127,0.28); padding: 8px 12px; text-align: left; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid rgba(127,127,127,0.28); padding: 8px 12px; text-align: left; vertical-align: top; }
     th { background: rgba(127,127,127,0.1); }
+    td code { word-break: break-all; }
     a { color: #0066cc; }
   </style>
 </head>
