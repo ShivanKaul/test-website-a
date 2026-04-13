@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shields Bidi Bug</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 18px;
+      text-align: center;
+    }
+    .container { max-width: 500px; }
+    h1 { font-size: 1.5em; margin-bottom: 8px; }
+    p { opacity: 0.7; line-height: 1.5; }
+    code {
+      background: rgba(127,127,127,0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Click the Shields icon above</h1>
+    <p>
+      The domain shown in the Shields panel should be
+      <code id="expected"></code>
+      &mdash; check if it matches.
+    </p>
+  </div>
+  <script>
+    document.getElementById('expected').textContent = location.hostname
+  </script>
+</body>
+</html>
