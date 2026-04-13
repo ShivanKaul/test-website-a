@@ -10,7 +10,6 @@
     .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
     code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; }
     a { color: #0066cc; }
-    ol { margin: 8px 0 0 22px; }
     .pass { color: #22863a; font-weight: bold; }
     .fail { color: #cb2431; font-weight: bold; }
   </style>
@@ -27,19 +26,6 @@
     <code>Content-Disposition: attachment</code>, Brave's body sniffer should
     <strong>not</strong> De-AMP it. The response should be treated as a download,
     not redirected to the canonical URL.</p>
-    <p>Before the fix, the body sniffer would still extract the canonical
-    <code>&lt;link&gt;</code> from the AMP HTML and redirect the browser, preventing
-    the download from happening.</p>
-  </div>
-
-  <div class="card">
-    <h2>Steps</h2>
-    <ol>
-      <li>Click the <b>AMP attachment link</b> below.</li>
-      <li>Site B's Cloudflare Function will serve a valid AMP page with
-      <code>Content-Disposition: attachment; filename="amp-page.html"</code>.</li>
-      <li>Observe the browser behavior.</li>
-    </ol>
   </div>
 
   <div class="card">
@@ -58,13 +44,9 @@
         <td style="padding:6px;">Browser downloads <code>amp-page.html</code></td>
         <td style="padding:6px;"><span class="pass">PASS</span> -- body sniffer respected Content-Disposition</td>
       </tr>
-      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+      <tr>
         <td style="padding:6px;">Browser redirects to this site's canonical page</td>
         <td style="padding:6px;"><span class="fail">FAIL</span> -- body sniffer De-AMPed an attachment response</td>
-      </tr>
-      <tr>
-        <td style="padding:6px;">Browser shows the AMP page (no redirect, no download)</td>
-        <td style="padding:6px;">De-AMP is disabled or not using Brave</td>
       </tr>
     </table>
   </div>
