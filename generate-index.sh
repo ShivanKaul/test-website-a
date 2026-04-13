@@ -37,7 +37,7 @@ cat > index.html <<'HTMLEOF'
       The domain shown in the Shields panel should be
       <code id="expected"></code>.
       If the bug is present, it will show as
-      <code id="buggy"></code> instead.
+      <code id="buggy"></code> instead (possibly truncated).
     </p>
   </div>
   <script>
