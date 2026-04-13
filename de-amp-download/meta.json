@@ -1,0 +1,4 @@
+{
+  "title": "De-AMP Content-Disposition: attachment Bypass",
+  "description": "Tests that AMP pages served with Content-Disposition: attachment are downloaded, not De-AMPed."
+}

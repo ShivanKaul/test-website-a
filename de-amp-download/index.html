@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>De-AMP Content-Disposition: attachment Bypass Test</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; margin: 0 auto; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; }
+    a { color: #0066cc; }
+    ol { margin: 8px 0 0 22px; }
+    .pass { color: #22863a; font-weight: bold; }
+    .fail { color: #cb2431; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>De-AMP Content-Disposition: attachment Bypass Test</h1>
+  <p>Site A: <code>test-website-a.pages.dev</code></p>
+  <p>Resolves: <a href="https://github.com/brave/brave-browser/issues/53486">brave-browser#53486</a>
+  | Fix: <a href="https://github.com/brave/brave-core/pull/34589">brave-core#34589</a></p>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>When a server responds with an AMP page that has
+    <code>Content-Disposition: attachment</code>, Brave's body sniffer should
+    <strong>not</strong> De-AMP it. The response should be treated as a download,
+    not redirected to the canonical URL.</p>
+    <p>Before the fix, the body sniffer would still extract the canonical
+    <code>&lt;link&gt;</code> from the AMP HTML and redirect the browser, preventing
+    the download from happening.</p>
+  </div>
+
+  <div class="card">
+    <h2>Steps</h2>
+    <ol>
+      <li>Click the <b>AMP attachment link</b> below.</li>
+      <li>Site B's Cloudflare Function will serve a valid AMP page with
+      <code>Content-Disposition: attachment; filename="amp-page.html"</code>.</li>
+      <li>Observe the browser behavior.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Test Link</h2>
+    <p><a href="https://test-website-b.pages.dev/de-amp-download/amp-attachment">AMP page on Site B with Content-Disposition: attachment</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <th style="text-align:left;padding:6px;">Behavior</th>
+        <th style="text-align:left;padding:6px;">Result</th>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">Browser downloads <code>amp-page.html</code></td>
+        <td style="padding:6px;"><span class="pass">PASS</span> -- body sniffer respected Content-Disposition</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">Browser redirects to this site's canonical page</td>
+        <td style="padding:6px;"><span class="fail">FAIL</span> -- body sniffer De-AMPed an attachment response</td>
+      </tr>
+      <tr>
+        <td style="padding:6px;">Browser shows the AMP page (no redirect, no download)</td>
+        <td style="padding:6px;">De-AMP is disabled or not using Brave</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Canonical target (should not load)</h2>
+    <p>If De-AMP incorrectly processes the attachment, you will be redirected to:
+    <a href="https://test-website-a.pages.dev/de-amp-download/canonical.html">test-website-a.pages.dev/de-amp-download/canonical.html</a></p>
+  </div>
+</body>
+</html>
