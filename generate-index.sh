@@ -35,12 +35,23 @@ cat > index.html <<'HTMLEOF'
     <h1>Click the Shields icon above</h1>
     <p>
       The domain shown in the Shields panel should be
-      <code id="expected"></code>
-      &mdash; check if it matches.
+      <code id="expected"></code>.
+      If the bug is present, it will show as
+      <code id="buggy"></code> instead.
     </p>
   </div>
   <script>
-    document.getElementById('expected').textContent = location.hostname
+    var host = location.hostname
+    document.getElementById('expected').textContent = host
+    // Simulate bidi reordering: numeric-only labels at the start get moved after alpha labels
+    var labels = host.split('.')
+    var i = 0
+    while (i < labels.length && /^\d+$/.test(labels[i])) i++
+    if (i > 0 && i < labels.length) {
+      document.getElementById('buggy').textContent = labels.slice(i).concat(labels.slice(0, i)).join('.')
+    } else {
+      document.getElementById('buggy').textContent = '(no reordering expected)'
+    }
   </script>
 </body>
 </html>
