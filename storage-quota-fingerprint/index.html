@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Storage Quota Fingerprinting Test</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; }
+    h1,h2 { margin: 0 0 10px 0; }
+    p { margin: 8px 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    .pass { border-color: rgba(0,160,0,0.7); }
+    .fail { border-color: rgba(200,0,0,0.7); }
+    .warn { border-color: rgba(200,140,0,0.8); }
+    .na { border-color: rgba(127,127,127,0.4); }
+    button {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(127,127,127,0.35);
+      background: rgba(127,127,127,0.12);
+      color: inherit;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    button:hover { background: rgba(127,127,127,0.18); }
+    pre { padding: 12px; border-radius: 10px; overflow: auto; background: rgba(127,127,127,0.14); margin: 0; white-space: pre-wrap; word-break: break-all; }
+    .small { opacity: 0.85; font-size: 0.9em; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(127,127,127,0.2); }
+    th { opacity: 0.7; font-size: 0.85em; text-transform: uppercase; }
+    td.mono { font-size: 0.9em; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; }
+    .tag-pass { background: rgba(0,160,0,0.15); color: rgba(0,140,0,1); }
+    .tag-fail { background: rgba(200,0,0,0.15); color: rgba(180,0,0,1); }
+    .tag-na { background: rgba(127,127,127,0.15); color: rgba(127,127,127,1); }
+    @media (prefers-color-scheme: dark) {
+      .tag-pass { color: rgba(80,220,80,1); }
+      .tag-fail { color: rgba(255,100,100,1); }
+      .tag-na { color: rgba(180,180,180,1); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Storage Quota Fingerprinting Test</h1>
+
+  <div class="card">
+    <p class="small">
+      This test checks whether storage quota APIs return values that differ between
+      normal and private browsing modes. If they do, a website can detect incognito mode.
+    </p>
+    <p class="small">
+      <b>How to use:</b> Run this page in a normal window, note the values, then run it
+      in a private/incognito window and compare. Identical values = good (no fingerprint).
+      Different values = the API leaks browsing mode.
+    </p>
+    <p class="small">
+      Related: <a href="https://github.com/brave/brave-browser/issues/39520">brave-browser#39520</a>
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn">Run all tests</button>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>API</th>
+          <th>Quota</th>
+          <th>Usage</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="comparisonCard" style="display:none;">
+    <h2>Cross-mode comparison</h2>
+    <p class="small">
+      Values from the other browsing mode are stored in localStorage (normal mode only).
+      If you ran this in normal mode first, then open this page in a private window to compare.
+    </p>
+    <div id="comparisonResult"></div>
+  </div>
+
+  <div class="card" id="rawCard" style="display:none;">
+    <h2>Raw output</h2>
+    <pre id="rawLog"></pre>
+  </div>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = "quota_fingerprint_normal_results";
+      var resultsBody = document.getElementById("resultsBody");
+      var resultsCard = document.getElementById("resultsCard");
+      var comparisonCard = document.getElementById("comparisonCard");
+      var comparisonResult = document.getElementById("comparisonResult");
+      var rawCard = document.getElementById("rawCard");
+      var rawLog = document.getElementById("rawLog");
+
+      function formatBytes(bytes) {
+        if (bytes === null || bytes === undefined) return "N/A";
+        if (bytes === 0) return "0 B";
+        var units = ["B", "KB", "MB", "GB", "TB"];
+        var i = Math.floor(Math.log(bytes) / Math.log(1024));
+        var val = bytes / Math.pow(1024, i);
+        return val.toFixed(2) + " " + units[i];
+      }
+
+      function log(line) {
+        rawLog.textContent += line + "\n";
+      }
+
+      function addRow(api, quota, usage, status) {
+        var tr = document.createElement("tr");
+
+        var tdApi = document.createElement("td");
+        tdApi.textContent = api;
+
+        var tdQuota = document.createElement("td");
+        tdQuota.className = "mono";
+        tdQuota.textContent = quota !== null ? formatBytes(quota) + " (" + quota + ")" : "N/A";
+
+        var tdUsage = document.createElement("td");
+        tdUsage.className = "mono";
+        tdUsage.textContent = usage !== null ? formatBytes(usage) : "N/A";
+
+        var tdStatus = document.createElement("td");
+        var tag = document.createElement("span");
+        tag.className = "tag tag-" + status.type;
+        tag.textContent = status.label;
+        tdStatus.appendChild(tag);
+
+        tr.appendChild(tdApi);
+        tr.appendChild(tdQuota);
+        tr.appendChild(tdUsage);
+        tr.appendChild(tdStatus);
+        resultsBody.appendChild(tr);
+      }
+
+      async function testStorageEstimate() {
+        if (!navigator.storage || !navigator.storage.estimate) {
+          return { api: "navigator.storage.estimate()", quota: null, usage: null, supported: false };
+        }
+        try {
+          var est = await navigator.storage.estimate();
+          return { api: "navigator.storage.estimate()", quota: est.quota, usage: est.usage, supported: true };
+        } catch (e) {
+          return { api: "navigator.storage.estimate()", quota: null, usage: null, supported: false, error: e.message };
+        }
+      }
+
+      function testWebkitTemporaryStorage() {
+        return new Promise(function (resolve) {
+          if (!navigator.webkitTemporaryStorage || !navigator.webkitTemporaryStorage.queryUsageAndQuota) {
+            resolve({ api: "navigator.webkitTemporaryStorage.queryUsageAndQuota()", quota: null, usage: null, supported: false });
+            return;
+          }
+          try {
+            navigator.webkitTemporaryStorage.queryUsageAndQuota(
+              function (usage, quota) {
+                resolve({ api: "navigator.webkitTemporaryStorage.queryUsageAndQuota()", quota: quota, usage: usage, supported: true });
+              },
+              function (err) {
+                resolve({ api: "navigator.webkitTemporaryStorage.queryUsageAndQuota()", quota: null, usage: null, supported: false, error: err.message });
+              }
+            );
+          } catch (e) {
+            resolve({ api: "navigator.webkitTemporaryStorage.queryUsageAndQuota()", quota: null, usage: null, supported: false, error: e.message });
+          }
+        });
+      }
+
+      function testWebkitPersistentStorage() {
+        return new Promise(function (resolve) {
+          if (!navigator.webkitPersistentStorage || !navigator.webkitPersistentStorage.queryUsageAndQuota) {
+            resolve({ api: "navigator.webkitPersistentStorage.queryUsageAndQuota()", quota: null, usage: null, supported: false });
+            return;
+          }
+          try {
+            navigator.webkitPersistentStorage.queryUsageAndQuota(
+              function (usage, quota) {
+                resolve({ api: "navigator.webkitPersistentStorage.queryUsageAndQuota()", quota: quota, usage: usage, supported: true });
+              },
+              function (err) {
+                resolve({ api: "navigator.webkitPersistentStorage.queryUsageAndQuota()", quota: null, usage: null, supported: false, error: err.message });
+              }
+            );
+          } catch (e) {
+            resolve({ api: "navigator.webkitPersistentStorage.queryUsageAndQuota()", quota: null, usage: null, supported: false, error: e.message });
+          }
+        });
+      }
+
+      function isPrivateBrowsing() {
+        // Heuristic: localStorage is available in private mode but we can't
+        // reliably detect it. We'll just note that we can't be sure.
+        return null;
+      }
+
+      function saveNormalResults(results) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
+        } catch (e) {
+          // In private mode, localStorage may work but won't persist.
+        }
+      }
+
+      function loadNormalResults() {
+        try {
+          var data = localStorage.getItem(STORAGE_KEY);
+          if (data) return JSON.parse(data);
+        } catch (e) {}
+        return null;
+      }
+
+      function showComparison(currentResults) {
+        var saved = loadNormalResults();
+        if (!saved) {
+          comparisonCard.style.display = "block";
+          comparisonResult.innerHTML =
+            '<p class="small">No saved normal-mode results found. Run this page in a normal window first, ' +
+            'then open it in a private window to see the comparison.</p>';
+          return;
+        }
+
+        comparisonCard.style.display = "block";
+        var html = '<table><thead><tr><th>API</th><th>Normal quota</th><th>Current quota</th><th>Match?</th></tr></thead><tbody>';
+        var allMatch = true;
+
+        for (var i = 0; i < currentResults.length; i++) {
+          var cur = currentResults[i];
+          var sav = saved[i];
+          if (!sav || !cur.supported || !sav.supported) {
+            html += '<tr><td>' + cur.api + '</td><td>N/A</td><td>N/A</td><td><span class="tag tag-na">N/A</span></td></tr>';
+            continue;
+          }
+          var match = cur.quota === sav.quota;
+          if (!match) allMatch = false;
+          html += '<tr><td>' + cur.api + '</td>' +
+            '<td class="mono">' + formatBytes(sav.quota) + '</td>' +
+            '<td class="mono">' + formatBytes(cur.quota) + '</td>' +
+            '<td><span class="tag tag-' + (match ? 'pass' : 'fail') + '">' + (match ? 'SAME' : 'DIFFERENT') + '</span></td></tr>';
+        }
+
+        html += '</tbody></table>';
+
+        if (allMatch) {
+          html += '<p><span class="tag tag-pass">PASS</span> All quota values match. Incognito detection via storage quota is not possible.</p>';
+        } else {
+          html += '<p><span class="tag tag-fail">LEAK</span> Quota values differ between modes. A website could detect private browsing.</p>';
+        }
+
+        comparisonResult.innerHTML = html;
+      }
+
+      async function runTests() {
+        resultsBody.innerHTML = "";
+        rawLog.textContent = "";
+        resultsCard.style.display = "block";
+        rawCard.style.display = "block";
+
+        log("Running storage quota fingerprint tests...");
+        log("User agent: " + navigator.userAgent);
+        log("Timestamp: " + new Date().toISOString());
+        log("");
+
+        var results = [];
+
+        // Test 1: navigator.storage.estimate()
+        var est = await testStorageEstimate();
+        results.push(est);
+        if (est.supported) {
+          addRow(est.api, est.quota, est.usage, { type: "pass", label: "Supported" });
+          log(est.api + ": quota=" + est.quota + " (" + formatBytes(est.quota) + "), usage=" + est.usage);
+        } else {
+          addRow(est.api, null, null, { type: "na", label: "Not supported" });
+          log(est.api + ": not supported" + (est.error ? " (" + est.error + ")" : ""));
+        }
+
+        // Test 2: navigator.webkitTemporaryStorage
+        var temp = await testWebkitTemporaryStorage();
+        results.push(temp);
+        if (temp.supported) {
+          addRow(temp.api, temp.quota, temp.usage, { type: "pass", label: "Supported" });
+          log(temp.api + ": quota=" + temp.quota + " (" + formatBytes(temp.quota) + "), usage=" + temp.usage);
+        } else {
+          addRow(temp.api, null, null, { type: "na", label: "Not supported" });
+          log(temp.api + ": not supported" + (temp.error ? " (" + temp.error + ")" : ""));
+        }
+
+        // Test 3: navigator.webkitPersistentStorage
+        var pers = await testWebkitPersistentStorage();
+        results.push(pers);
+        if (pers.supported) {
+          addRow(pers.api, pers.quota, pers.usage, { type: "pass", label: "Supported" });
+          log(pers.api + ": quota=" + pers.quota + " (" + formatBytes(pers.quota) + "), usage=" + pers.usage);
+        } else {
+          addRow(pers.api, null, null, { type: "na", label: "Not supported" });
+          log(pers.api + ": not supported" + (pers.error ? " (" + pers.error + ")" : ""));
+        }
+
+        log("");
+
+        // Also log performance.memory if available (another incognito signal)
+        if (performance && performance.memory) {
+          log("performance.memory.jsHeapSizeLimit: " + performance.memory.jsHeapSizeLimit + " (" + formatBytes(performance.memory.jsHeapSizeLimit) + ")");
+          log("performance.memory.totalJSHeapSize: " + performance.memory.totalJSHeapSize + " (" + formatBytes(performance.memory.totalJSHeapSize) + ")");
+        } else {
+          log("performance.memory: not available");
+        }
+
+        // Save results if in normal mode (localStorage persists)
+        saveNormalResults(results);
+
+        // Show comparison
+        showComparison(results);
+
+        log("");
+        log("Done. Compare these values between normal and private windows.");
+      }
+
+      document.getElementById("runBtn").addEventListener("click", runTests);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+{
+  "title": "Storage Quota Fingerprinting",
+  "description": "Tests whether storage quota APIs leak different values in normal vs. private browsing, enabling incognito detection. Covers both the modern navigator.storage API and the legacy webkitTemporaryStorage API."
+}
