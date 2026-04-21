@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Noscript Subdomain Redirect Test</title>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=https://nojs.test-website-a.pages.dev/noscript-redirect/landed.html" />
+  </noscript>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; margin: 0 auto; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; }
+    a { color: #0066cc; }
+    ol { margin: 8px 0 0 22px; }
+    .pass { border-color: rgba(0,160,0,0.7); }
+    .fail { border-color: rgba(200,0,0,0.7); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; }
+    .tag-pass { background: rgba(0,160,0,0.15); color: rgba(0,140,0,1); }
+    .tag-fail { background: rgba(200,0,0,0.15); color: rgba(180,0,0,1); }
+    @media (prefers-color-scheme: dark) {
+      .tag-pass { color: rgba(80,220,80,1); }
+      .tag-fail { color: rgba(255,100,100,1); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Noscript Subdomain Redirect Test</h1>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>Some sites use <code>&lt;noscript&gt;&lt;meta http-equiv="refresh"&gt;</code> to
+    detect when JavaScript is disabled and permanently redirect the user to a subdomain
+    (e.g. from <code>a.com</code> to <code>x.a.com</code>). This can be used for
+    fingerprinting or tracking: the subdomain can serve different content, set different
+    cookies, or simply identify the user as a JS-disabled visitor.</p>
+    <p>This page contains a <code>&lt;noscript&gt;</code> block in its <code>&lt;head&gt;</code>
+    that performs an immediate redirect to <code>nojs.test-website-a.pages.dev</code>.</p>
+  </div>
+
+  <div class="card" id="resultCard">
+    <h2>Result</h2>
+    <p id="resultText"></p>
+  </div>
+
+  <div class="card">
+    <h2>Steps</h2>
+    <ol>
+      <li>Open this page with JavaScript enabled. You should see "JS is enabled" below, meaning
+      the <code>&lt;noscript&gt;</code> redirect did not fire.</li>
+      <li>Disable JavaScript (e.g. via DevTools, browser settings, or a Brave Shields toggle)
+      and reload this page.</li>
+      <li>If the browser does <b>not</b> protect against this technique, you will be
+      redirected to <code>nojs.test-website-a.pages.dev/noscript-redirect/landed.html</code>.</li>
+      <li>If the browser blocks or ignores the <code>&lt;noscript&gt;</code> redirect, you will
+      stay on this page (and see the <code>&lt;noscript&gt;</code> fallback message below).</li>
+    </ol>
+  </div>
+
+  <noscript>
+    <div class="card fail">
+      <h2>JavaScript is disabled</h2>
+      <p>If you are reading this, the <code>&lt;meta http-equiv="refresh"&gt;</code> redirect
+      in the <code>&lt;head&gt;</code> was blocked by the browser. This is the
+      <b>protected</b> outcome.</p>
+      <p>If you were redirected to <code>nojs.test-website-a.pages.dev</code> instead,
+      the browser did not block the noscript redirect.</p>
+    </div>
+  </noscript>
+
+  <div class="card">
+    <h2>How it works</h2>
+    <p>The <code>&lt;head&gt;</code> of this page contains:</p>
+    <pre style="padding:12px;border-radius:10px;overflow:auto;background:rgba(127,127,127,0.14);margin:0;white-space:pre-wrap;"><code>&lt;noscript&gt;
+  &lt;meta http-equiv="refresh"
+        content="0;url=https://nojs.test-website-a.pages.dev/noscript-redirect/landed.html" /&gt;
+&lt;/noscript&gt;</code></pre>
+    <p>When JavaScript is disabled, the browser executes the <code>&lt;noscript&gt;</code>
+    block, which triggers an immediate client-side redirect to the subdomain.</p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <th style="text-align:left;padding:6px;">Scenario</th>
+        <th style="text-align:left;padding:6px;">Expected behavior</th>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">JS enabled</td>
+        <td style="padding:6px;">Page loads normally, no redirect</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">JS disabled (unprotected browser)</td>
+        <td style="padding:6px;">Redirected to <code>nojs.test-website-a.pages.dev</code></td>
+      </tr>
+      <tr>
+        <td style="padding:6px;">JS disabled (protected browser)</td>
+        <td style="padding:6px;">Stays on this page, noscript redirect blocked</td>
+      </tr>
+    </table>
+  </div>
+
+  <script>
+    (function () {
+      var card = document.getElementById('resultCard');
+      var text = document.getElementById('resultText');
+      card.classList.add('pass');
+      text.innerHTML = '<span class="tag tag-pass">JS ENABLED</span> ' +
+        'JavaScript is running. The <code>&lt;noscript&gt;</code> redirect did not fire. ' +
+        'Disable JS and reload to test the redirect behavior.';
+    })();
+  </script>
+</body>
+</html>

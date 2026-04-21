@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Noscript Redirect: Landed</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; margin: 0 auto; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    .fail { border-color: rgba(200,0,0,0.7); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; }
+    a { color: #0066cc; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; }
+    .tag-fail { background: rgba(200,0,0,0.15); color: rgba(180,0,0,1); }
+    @media (prefers-color-scheme: dark) {
+      .tag-fail { color: rgba(255,100,100,1); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Noscript Redirect: Landed on Subdomain</h1>
+
+  <div class="card fail">
+    <p><span class="tag tag-fail">REDIRECTED</span> You were redirected here from
+    <code>test-website-a.pages.dev</code> via a <code>&lt;noscript&gt;&lt;meta
+    http-equiv="refresh"&gt;</code> tag.</p>
+    <p>This means the browser did <b>not</b> block the noscript-based subdomain redirect.
+    A site using this technique can detect that JavaScript is disabled and redirect you
+    to a different origin (<code>nojs.test-website-a.pages.dev</code>) for tracking or
+    fingerprinting.</p>
+  </div>
+
+  <div class="card">
+    <h2>What happened</h2>
+    <ol style="margin:8px 0 0 22px;">
+      <li>You loaded <code>test-website-a.pages.dev/noscript-redirect/</code> with JS disabled.</li>
+      <li>The <code>&lt;noscript&gt;</code> block in the <code>&lt;head&gt;</code> fired.</li>
+      <li>A <code>&lt;meta http-equiv="refresh" content="0;url=..."&gt;</code> redirected you
+      to this subdomain page.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <p><a href="https://test-website-a.pages.dev/noscript-redirect/">Back to the test page</a></p>
+  </div>
+</body>
+</html>
