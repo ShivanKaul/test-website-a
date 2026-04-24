@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewport Keyboard Resize Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    font-size: 1.3rem;
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 540px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+  input {
+    font-size: 1.3rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid #7c3aed;
+    border-radius: 8px;
+    width: 100%;
+    margin: 1rem 0;
+  }
+  #log {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1rem;
+    background: #f5f5f5;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    white-space: pre-line;
+  }
+  .pass { color: #166534; font-weight: 600; }
+  .fail { color: #991b1b; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Viewport Keyboard Resize Test</h1>
+
+<p>Tap the input below to open the virtual keyboard. The layout viewport height should <strong>not change</strong> when the keyboard appears.</p>
+
+<input type="text" placeholder="Tap here to open keyboard">
+
+<div id="log"></div>
+
+<script>
+  var log = document.getElementById('log');
+  var initialHeight = document.documentElement.clientHeight;
+
+  log.textContent = 'Layout viewport: ' + initialHeight + 'px\nWaiting for keyboard...';
+
+  function check() {
+    var current = document.documentElement.clientHeight;
+    var changed = Math.abs(current - initialHeight) > 1;
+    log.innerHTML =
+      'Initial layout viewport: ' + initialHeight + 'px\n' +
+      'Current layout viewport: ' + current + 'px\n\n' +
+      (changed
+        ? '<span class="fail">BUG: Layout viewport resized by ' + (initialHeight - current) + 'px when the keyboard appeared.</span>'
+        : '<span class="pass">Correct: Layout viewport did not resize.</span>');
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', check);
+  }
+  window.addEventListener('resize', check);
+</script>
+
+</body>
+</html>

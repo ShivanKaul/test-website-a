@@ -1,0 +1,4 @@
+{
+  "title": "Viewport Keyboard Resize",
+  "description": "Tests whether the browser incorrectly resizes the layout viewport when the virtual keyboard appears."
+}
