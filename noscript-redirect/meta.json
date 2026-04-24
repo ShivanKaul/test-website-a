@@ -1,4 +1,4 @@
 {
   "title": "Noscript Subdomain Redirect",
-  "description": "Tests whether browsers protect against <noscript>-based permanent redirects to a subdomain when JavaScript is disabled."
+  "description": "Tests whether browsers protect against &lt;noscript&gt;-based permanent redirects to a subdomain when JavaScript is disabled."
 }
