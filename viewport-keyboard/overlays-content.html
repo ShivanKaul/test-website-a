@@ -51,10 +51,16 @@
 <script>
   var log = document.getElementById('log');
   var initialHeight = document.documentElement.clientHeight;
+  var focused = false;
 
   log.textContent = 'Layout viewport: ' + initialHeight + 'px\nWaiting for keyboard...';
 
+  document.querySelector('input').addEventListener('focus', function() {
+    focused = true;
+  });
+
   function check() {
+    if (!focused) return;
     var current = document.documentElement.clientHeight;
     var changed = Math.abs(current - initialHeight) > 1;
     log.innerHTML =
