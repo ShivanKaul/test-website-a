@@ -1,0 +1,514 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ephemeral third-party storage clearing test</title>
+
+<style>
+  body {
+    font: 16px system-ui, sans-serif;
+    max-width: 1040px;
+    margin: 32px auto;
+    padding: 0 16px;
+    line-height: 1.45;
+  }
+
+  button {
+    margin: 4px 8px 4px 0;
+    padding: 8px 12px;
+  }
+
+  code,
+  pre {
+    background: #f4f4f4;
+    padding: 2px 4px;
+  }
+
+  pre {
+    padding: 12px;
+    overflow: auto;
+  }
+
+  iframe {
+    width: 100%;
+    height: 180px;
+    border: 1px solid #ccc;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+  }
+
+  th,
+  td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background: #f2f2f2;
+  }
+
+  .pass {
+    color: #087a08;
+    font-weight: 700;
+  }
+
+  .fail {
+    color: #b00000;
+    font-weight: 700;
+  }
+
+  .warn {
+    color: #9a6400;
+    font-weight: 700;
+  }
+
+  .muted {
+    color: #666;
+  }
+
+  .box {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    background: #fafafa;
+  }
+</style>
+
+<h1>Ephemeral third-party storage clearing test</h1>
+
+<section class="box">
+  <h2>What this tests</h2>
+
+  <p>
+    This page tests whether storage written by a third-party iframe is cleared
+    after the embedding first-party site is closed or navigated away from.
+  </p>
+
+  <p>
+    The top-level page is the first-party site. The iframe is the third-party
+    site. The iframe writes a unique token into several storage mechanisms, then
+    this page checks whether that token can still be read.
+  </p>
+</section>
+
+<section class="box">
+  <h2>Expected behavior</h2>
+
+  <ul>
+    <li>
+      <strong>Same-session phase:</strong> stored values should be present.
+      This confirms the test can write and read third-party storage during the
+      active first-party session.
+    </li>
+    <li>
+      <strong>After-close phase:</strong> stored values should be absent.
+      If the same token is still present, the third-party storage partition
+      survived after the first-party site went away.
+    </li>
+  </ul>
+
+  <p>
+    A browser passes the ephemeral-storage claim only if storage is readable
+    during the same first-party session and cleared after the first-party site
+    is gone.
+  </p>
+
+  <p>
+    Before running the after-close test, close any other tabs open to this
+    first-party origin. If another first-party tab remains open, the storage
+    partition may legitimately remain alive.
+  </p>
+</section>
+
+<section>
+  <h2>Test configuration</h2>
+
+  <p>
+    First-party controller:
+    <code id="top-origin"></code>
+  </p>
+
+  <p>
+    Third-party iframe origin:
+    <code id="child-origin"></code>
+  </p>
+
+  <p>
+    Token:
+    <code id="token"></code>
+  </p>
+</section>
+
+<section>
+  <h2>Controls</h2>
+
+  <button id="write-read">Write + read in same first-party session</button>
+  <button id="bounce">Write, navigate away for 45s, return, read again</button>
+  <button id="read-only">Read only</button>
+  <button id="clear">Clear third-party state</button>
+</section>
+
+<section>
+  <h2>Third-party frame</h2>
+  <iframe id="child"></iframe>
+</section>
+
+<section>
+  <h2>Verdict</h2>
+  <div id="phase" class="muted">No test has run yet.</div>
+  <div id="summary"></div>
+</section>
+
+<section>
+  <h2>Raw result</h2>
+  <pre id="out"></pre>
+</section>
+
+<script>
+const params = new URLSearchParams(location.search);
+
+const childOrigin = new URL(
+  params.get("childOrigin") || "https://test-website-b.pages.dev"
+).origin;
+
+let token = params.get("token") || crypto.randomUUID();
+let baselineFetchBody = params.get("fetchBody") || "";
+
+document.getElementById("top-origin").textContent = location.origin;
+document.getElementById("child-origin").textContent = childOrigin;
+document.getElementById("token").textContent = token;
+
+const out = document.getElementById("out");
+const summary = document.getElementById("summary");
+const phaseEl = document.getElementById("phase");
+const frame = document.getElementById("child");
+
+const frameUrl = new URL("/ephemeral-3p-clearing/frame.html", childOrigin);
+frameUrl.searchParams.set("parentOrigin", location.origin);
+frame.src = frameUrl.href;
+
+const frameReady = new Promise((resolve) => {
+  frame.addEventListener("load", resolve, { once: true });
+});
+
+function log(value) {
+  out.textContent = typeof value === "string"
+    ? value
+    : JSON.stringify(value, null, 2);
+}
+
+async function callFrame(cmd, payload = {}) {
+  await frameReady;
+
+  const id = crypto.randomUUID();
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      window.removeEventListener("message", onMessage);
+      reject(new Error(`Timed out waiting for ${cmd}`));
+    }, 8000);
+
+    function onMessage(event) {
+      if (event.origin !== childOrigin) return;
+      if (!event.data || event.data.id !== id) return;
+
+      clearTimeout(timeout);
+      window.removeEventListener("message", onMessage);
+
+      if (event.data.ok) {
+        resolve(event.data.result);
+      } else {
+        reject(new Error(event.data.error || `Frame command failed: ${cmd}`));
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    frame.contentWindow.postMessage({ id, cmd, ...payload }, childOrigin);
+  });
+}
+
+function valueOf(cell) {
+  if (!cell) return undefined;
+  if (cell.ok) return cell.value;
+  return undefined;
+}
+
+function errorOf(cell) {
+  return cell && !cell.ok ? cell.error : "";
+}
+
+function classifyTokenStorage(name, cell, expectedToken, phase) {
+  const value = valueOf(cell);
+  const error = errorOf(cell);
+
+  if (phase === "same-session") {
+    if (value === expectedToken) {
+      return {
+        name,
+        status: "PASS",
+        verdict: "PASS: storage works in-session",
+        cssClass: "pass",
+        detail: value,
+      };
+    }
+
+    if (value === null || value === undefined || value === "") {
+      return {
+        name,
+        status: "INCONCLUSIVE",
+        verdict: "INCONCLUSIVE: storage unavailable or blocked in-session",
+        cssClass: "warn",
+        detail: error || value,
+      };
+    }
+
+    return {
+      name,
+      status: "INCONCLUSIVE",
+      verdict: "INCONCLUSIVE: unexpected value in-session",
+      cssClass: "warn",
+      detail: value,
+    };
+  }
+
+  if (phase === "after-close") {
+    if (value === expectedToken) {
+      return {
+        name,
+        status: "FAIL",
+        verdict: "FAIL: third-party storage survived after first-party site went away",
+        cssClass: "fail",
+        detail: value,
+      };
+    }
+
+    if (value === null || value === undefined || value === "") {
+      return {
+        name,
+        status: "PASS",
+        verdict: "PASS: third-party storage was cleared",
+        cssClass: "pass",
+        detail: error || value,
+      };
+    }
+
+    return {
+      name,
+      status: "PASS",
+      verdict: "PASS: old token was not reused",
+      cssClass: "pass",
+      detail: value,
+    };
+  }
+
+  return {
+    name,
+    status: "OBSERVED",
+    verdict: `OBSERVED: ${String(value)}`,
+    cssClass: "warn",
+    detail: value,
+  };
+}
+
+function classifyHttpFetch(cell, baseline, phase) {
+  const value = valueOf(cell);
+  const error = errorOf(cell);
+
+  if (!baseline) {
+    return {
+      name: "HTTP fetch cache",
+      status: "INCONCLUSIVE",
+      verdict: "INCONCLUSIVE: no baseline cached response",
+      cssClass: "warn",
+      detail: "Run write first.",
+    };
+  }
+
+  if (!value || !value.body) {
+    if (phase === "after-close") {
+      return {
+        name: "HTTP fetch cache",
+        status: "PASS",
+        verdict: "PASS: cached response was not reused",
+        cssClass: "pass",
+        detail: error || value,
+      };
+    }
+
+    return {
+      name: "HTTP fetch cache",
+      status: "INCONCLUSIVE",
+      verdict: "INCONCLUSIVE: fetch cache unavailable or blocked",
+      cssClass: "warn",
+      detail: error || value,
+    };
+  }
+
+  if (phase === "same-session") {
+    if (value.body === baseline) {
+      return {
+        name: "HTTP fetch cache",
+        status: "PASS",
+        verdict: "PASS: cached response works in-session",
+        cssClass: "pass",
+        detail: value.body,
+      };
+    }
+
+    return {
+      name: "HTTP fetch cache",
+      status: "INCONCLUSIVE",
+      verdict: "INCONCLUSIVE: cached response was not reused in-session",
+      cssClass: "warn",
+      detail: value.body,
+    };
+  }
+
+  if (phase === "after-close") {
+    if (value.body === baseline) {
+      return {
+        name: "HTTP fetch cache",
+        status: "FAIL",
+        verdict: "FAIL: cached response survived after first-party site went away",
+        cssClass: "fail",
+        detail: value.body,
+      };
+    }
+
+    return {
+      name: "HTTP fetch cache",
+      status: "PASS",
+      verdict: "PASS: old cached response was not reused",
+      cssClass: "pass",
+      detail: value.body,
+    };
+  }
+
+  return {
+    name: "HTTP fetch cache",
+    status: "OBSERVED",
+    verdict: "OBSERVED",
+    cssClass: "warn",
+    detail: value.body,
+  };
+}
+
+function renderComparison(result, phase) {
+  const rows = [
+    classifyTokenStorage("localStorage", result.localStorage, token, phase),
+    classifyTokenStorage("cookie JS", result.cookie, token, phase),
+    classifyTokenStorage("IndexedDB", result.indexedDB, token, phase),
+    classifyTokenStorage("CacheStorage", result.cacheStorage, token, phase),
+    classifyHttpFetch(result.httpFetch, baselineFetchBody, phase),
+  ];
+
+  const phaseLabel = phase === "after-close"
+    ? "After-close phase: storage should be absent."
+    : "Same-session phase: storage should be present.";
+
+  phaseEl.textContent = phaseLabel;
+
+  summary.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Storage mechanism</th>
+          <th>Verdict</th>
+          <th>Observed detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.name)}</td>
+            <td class="${row.cssClass}">${escapeHtml(row.verdict)}</td>
+            <td><code>${escapeHtml(formatDetail(row.detail))}</code></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  log({ phase, token, baselineFetchBody, result, interpreted: rows });
+}
+
+function formatDetail(value) {
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function writeAndRead() {
+  phaseEl.textContent = "Writing third-party state...";
+  summary.textContent = "";
+
+  const writeResult = await callFrame("write", { token });
+  baselineFetchBody = valueOf(writeResult.httpFetch)?.body || baselineFetchBody;
+
+  const readResult = await callFrame("read", { token });
+  renderComparison(readResult, "same-session");
+
+  return { writeResult, readResult };
+}
+
+async function bounceAwayAndReturn() {
+  if (!baselineFetchBody) {
+    await writeAndRead();
+  }
+
+  const returnUrl = new URL("/ephemeral-3p-clearing/", location.origin);
+  returnUrl.searchParams.set("phase", "after-close");
+  returnUrl.searchParams.set("token", token);
+  returnUrl.searchParams.set("childOrigin", childOrigin);
+  returnUrl.searchParams.set("fetchBody", baselineFetchBody);
+
+  const bounceUrl = new URL("/ephemeral-3p-clearing/bounce-back.html", childOrigin);
+  bounceUrl.searchParams.set("to", returnUrl.href);
+  bounceUrl.searchParams.set("ms", "45000");
+
+  location.href = bounceUrl.href;
+}
+
+async function readOnly(phase = "manual-read") {
+  const result = await callFrame("read", { token });
+  renderComparison(result, phase);
+}
+
+document.getElementById("write-read").onclick = () => {
+  writeAndRead().catch((e) => log(e.stack || e.message));
+};
+
+document.getElementById("bounce").onclick = () => {
+  bounceAwayAndReturn().catch((e) => log(e.stack || e.message));
+};
+
+document.getElementById("read-only").onclick = () => {
+  readOnly().catch((e) => log(e.stack || e.message));
+};
+
+document.getElementById("clear").onclick = async () => {
+  const result = await callFrame("clear", {});
+  phaseEl.textContent = "Clear command sent to third-party frame.";
+  summary.textContent = "";
+  log(result);
+};
+
+if (params.get("phase") === "after-close") {
+  readOnly("after-close").catch((e) => log(e.stack || e.message));
+}
+</script>
