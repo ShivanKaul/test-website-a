@@ -51,6 +51,13 @@
     background: #f2f2f2;
   }
 
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    font: 14px ui-monospace, monospace;
+  }
+
   .pass {
     color: #087a08;
     font-weight: 700;
@@ -86,7 +93,8 @@
 
   <p>
     This page tests whether storage written by a third-party iframe is cleared
-    after the embedding first-party site is closed or navigated away from.
+    after the embedding first-party site is closed, navigated away from, or after
+    a full browser restart.
   </p>
 
   <p>
@@ -109,6 +117,11 @@
       <strong>After-close phase:</strong> stored values should be absent.
       If the same token is still present, the third-party storage partition
       survived after the first-party site went away.
+    </li>
+    <li>
+      <strong>After-restart phase:</strong> stored values should be absent.
+      If the same token is still present after restarting the browser, the
+      third-party state survived across browser sessions.
     </li>
   </ul>
 
@@ -149,9 +162,12 @@
 
   <button id="write-read">Write + read in same first-party session</button>
   <button id="bounce">Write, navigate away for 45s, return, read again</button>
+  <button id="restart">Prepare manual browser-restart test</button>
   <button id="read-only">Read only</button>
   <button id="clear">Clear third-party state</button>
 </section>
+
+<section id="restart-instructions"></section>
 
 <section>
   <h2>Third-party frame</h2>
@@ -170,6 +186,7 @@
 </section>
 
 <script>
+const TEST_PATH = "/ephemeral-3p-clearing/";
 const params = new URLSearchParams(location.search);
 
 const childOrigin = new URL(
@@ -187,14 +204,15 @@ const out = document.getElementById("out");
 const summary = document.getElementById("summary");
 const phaseEl = document.getElementById("phase");
 const frame = document.getElementById("child");
-
-const frameUrl = new URL("/ephemeral-3p-clearing/frame.html", childOrigin);
-frameUrl.searchParams.set("parentOrigin", location.origin);
-frame.src = frameUrl.href;
+const restartInstructions = document.getElementById("restart-instructions");
 
 const frameReady = new Promise((resolve) => {
   frame.addEventListener("load", resolve, { once: true });
 });
+
+const frameUrl = new URL(`${TEST_PATH}frame.html`, childOrigin);
+frameUrl.searchParams.set("parentOrigin", location.origin);
+frame.src = frameUrl.href;
 
 function log(value) {
   out.textContent = typeof value === "string"
@@ -242,6 +260,15 @@ function errorOf(cell) {
   return cell && !cell.ok ? cell.error : "";
 }
 
+function isCleanupPhase(phase) {
+  return phase === "after-close" || phase === "after-restart";
+}
+
+function cleanupPhrase(phase) {
+  if (phase === "after-restart") return "after browser restart";
+  return "after first-party site went away";
+}
+
 function classifyTokenStorage(name, cell, expectedToken, phase) {
   const value = valueOf(cell);
   const error = errorOf(cell);
@@ -276,12 +303,12 @@ function classifyTokenStorage(name, cell, expectedToken, phase) {
     };
   }
 
-  if (phase === "after-close") {
+  if (isCleanupPhase(phase)) {
     if (value === expectedToken) {
       return {
         name,
         status: "FAIL",
-        verdict: "FAIL: third-party storage survived after first-party site went away",
+        verdict: `FAIL: third-party storage survived ${cleanupPhrase(phase)}`,
         cssClass: "fail",
         detail: value,
       };
@@ -291,7 +318,7 @@ function classifyTokenStorage(name, cell, expectedToken, phase) {
       return {
         name,
         status: "PASS",
-        verdict: "PASS: third-party storage was cleared",
+        verdict: `PASS: third-party storage was cleared ${cleanupPhrase(phase)}`,
         cssClass: "pass",
         detail: error || value,
       };
@@ -330,7 +357,7 @@ function classifyHttpFetch(cell, baseline, phase) {
   }
 
   if (!value || !value.body) {
-    if (phase === "after-close") {
+    if (isCleanupPhase(phase)) {
       return {
         name: "HTTP fetch cache",
         status: "PASS",
@@ -369,12 +396,12 @@ function classifyHttpFetch(cell, baseline, phase) {
     };
   }
 
-  if (phase === "after-close") {
+  if (isCleanupPhase(phase)) {
     if (value.body === baseline) {
       return {
         name: "HTTP fetch cache",
         status: "FAIL",
-        verdict: "FAIL: cached response survived after first-party site went away",
+        verdict: `FAIL: cached response survived ${cleanupPhrase(phase)}`,
         cssClass: "fail",
         detail: value.body,
       };
@@ -402,14 +429,18 @@ function renderComparison(result, phase) {
   const rows = [
     classifyTokenStorage("localStorage", result.localStorage, token, phase),
     classifyTokenStorage("cookie JS", result.cookie, token, phase),
+    classifyTokenStorage("cookie HTTP", result.httpCookie, token, phase),
     classifyTokenStorage("IndexedDB", result.indexedDB, token, phase),
     classifyTokenStorage("CacheStorage", result.cacheStorage, token, phase),
     classifyHttpFetch(result.httpFetch, baselineFetchBody, phase),
   ];
 
-  const phaseLabel = phase === "after-close"
-    ? "After-close phase: storage should be absent."
-    : "Same-session phase: storage should be present.";
+  const phaseLabel = {
+    "same-session": "Same-session phase: storage should be present.",
+    "after-close": "After-close phase: storage should be absent.",
+    "after-restart": "After-restart phase: storage should be absent.",
+    "manual-read": "Manual read: observed values only.",
+  }[phase] || "Observed values.";
 
   phaseEl.textContent = phaseLabel;
 
@@ -453,9 +484,19 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function makeReturnUrl(phase) {
+  const returnUrl = new URL(TEST_PATH, location.origin);
+  returnUrl.searchParams.set("phase", phase);
+  returnUrl.searchParams.set("token", token);
+  returnUrl.searchParams.set("childOrigin", childOrigin);
+  returnUrl.searchParams.set("fetchBody", baselineFetchBody);
+  return returnUrl;
+}
+
 async function writeAndRead() {
   phaseEl.textContent = "Writing third-party state...";
   summary.textContent = "";
+  restartInstructions.innerHTML = "";
 
   const writeResult = await callFrame("write", { token });
   baselineFetchBody = valueOf(writeResult.httpFetch)?.body || baselineFetchBody;
@@ -471,17 +512,37 @@ async function bounceAwayAndReturn() {
     await writeAndRead();
   }
 
-  const returnUrl = new URL("/ephemeral-3p-clearing/", location.origin);
-  returnUrl.searchParams.set("phase", "after-close");
-  returnUrl.searchParams.set("token", token);
-  returnUrl.searchParams.set("childOrigin", childOrigin);
-  returnUrl.searchParams.set("fetchBody", baselineFetchBody);
-
-  const bounceUrl = new URL("/ephemeral-3p-clearing/bounce-back.html", childOrigin);
+  const returnUrl = makeReturnUrl("after-close");
+  const bounceUrl = new URL(`${TEST_PATH}bounce-back.html`, childOrigin);
   bounceUrl.searchParams.set("to", returnUrl.href);
   bounceUrl.searchParams.set("ms", "45000");
 
   location.href = bounceUrl.href;
+}
+
+async function prepareRestartTest() {
+  if (!baselineFetchBody) {
+    await writeAndRead();
+  }
+
+  const restartUrl = makeReturnUrl("after-restart").href;
+
+  restartInstructions.innerHTML = `
+    <section class="box">
+      <h2>Manual browser-restart test</h2>
+      <ol>
+        <li>Copy this URL.</li>
+        <li>Quit the browser completely.</li>
+        <li>Reopen the browser directly to this URL.</li>
+      </ol>
+      <input readonly value="${escapeHtml(restartUrl)}">
+      <p>
+        <a href="${escapeHtml(restartUrl)}">Open after restart URL</a>
+      </p>
+    </section>
+  `;
+
+  log({ restartUrl, token, baselineFetchBody });
 }
 
 async function readOnly(phase = "manual-read") {
@@ -497,6 +558,10 @@ document.getElementById("bounce").onclick = () => {
   bounceAwayAndReturn().catch((e) => log(e.stack || e.message));
 };
 
+document.getElementById("restart").onclick = () => {
+  prepareRestartTest().catch((e) => log(e.stack || e.message));
+};
+
 document.getElementById("read-only").onclick = () => {
   readOnly().catch((e) => log(e.stack || e.message));
 };
@@ -505,10 +570,13 @@ document.getElementById("clear").onclick = async () => {
   const result = await callFrame("clear", {});
   phaseEl.textContent = "Clear command sent to third-party frame.";
   summary.textContent = "";
+  restartInstructions.innerHTML = "";
   log(result);
 };
 
-if (params.get("phase") === "after-close") {
-  readOnly("after-close").catch((e) => log(e.stack || e.message));
+const phase = params.get("phase");
+
+if (phase === "after-close" || phase === "after-restart") {
+  readOnly(phase).catch((e) => log(e.stack || e.message));
 }
 </script>
