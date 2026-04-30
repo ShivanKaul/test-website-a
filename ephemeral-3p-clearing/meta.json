@@ -1,0 +1,1 @@
+{ "title": "Ephemeral Third-Party Storage Clearing", "description": "Tests whether storage written by a cross-site iframe is cleared after the embedding first-party site is closed or navigated away from." }
