@@ -63,6 +63,11 @@
     font-weight: 700;
   }
 
+  .absent {
+    color: #087a08;
+    font-weight: 700;
+  }
+
   .fail {
     color: #b00000;
     font-weight: 700;
@@ -184,20 +189,16 @@ const TEST_PATH = "/ephemeral-3p-clearing/";
 const params = new URLSearchParams(location.search);
 
 const TESTS = [
-  { key: "altSvc", label: "Alt-Svc" },
   { key: "cacheStorage", label: "CacheStorage" },
   { key: "cookieHTTP", label: "cookie (HTTP)" },
   { key: "cookieJS", label: "cookie (JS)" },
   { key: "cookieStore", label: "CookieStore" },
   { key: "cssCache", label: "CSS cache" },
-  { key: "faviconCache", label: "favicon cache" },
   { key: "fetchCache", label: "fetch cache" },
-  { key: "fontCache", label: "font cache" },
   { key: "iframeCache", label: "iframe cache" },
   { key: "imageCache", label: "image cache" },
   { key: "indexedDB", label: "indexedDB" },
   { key: "localStorage", label: "localStorage" },
-  { key: "prefetchCache", label: "prefetch cache" },
   { key: "scriptCache", label: "script cache" },
   { key: "xhrCache", label: "XMLHttpRequest cache" },
 ];
@@ -279,16 +280,16 @@ function valueOf(cell) {
   return undefined;
 }
 
-function isHarnessUnsupported(cell) {
-  return Boolean(cell && cell.harnessUnsupported);
-}
-
 function errorOf(cell) {
   return cell && !cell.ok ? cell.error : "";
 }
 
 function hasBaseline(value) {
   return value !== undefined && value !== null && value !== "";
+}
+
+function isNoValue(value) {
+  return value === null || value === undefined || value === "";
 }
 
 function isCleanupPhase(phase) {
@@ -319,21 +320,30 @@ function classify(test, cell, phase) {
   const value = valueOf(cell);
   const error = errorOf(cell);
 
-  if (isHarnessUnsupported(cell)) {
+  if (phase === "manual-read") {
+    if (!cell || !cell.ok) {
+      return {
+        label: test.label,
+        cssClass: "fail",
+        verdict: "ERROR",
+        detail: error,
+      };
+    }
+
+    if (isNoValue(value)) {
+      return {
+        label: test.label,
+        cssClass: "absent",
+        verdict: "NO VALUE PRESENT",
+        detail: value,
+      };
+    }
+
     return {
       label: test.label,
       cssClass: "warn",
-      verdict: "UNSUPPORTED BY THIS HARNESS",
-      detail: error,
-    };
-  }
-
-  if (phase === "manual-read") {
-    return {
-      label: test.label,
-      cssClass: cell && cell.ok ? "warn" : "fail",
-      verdict: cell && cell.ok ? "OBSERVED" : "ERROR",
-      detail: cell && cell.ok ? value : error,
+      verdict: "VALUE PRESENT",
+      detail: value,
     };
   }
 
