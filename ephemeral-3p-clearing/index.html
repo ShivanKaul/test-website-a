@@ -5,7 +5,7 @@
 <style>
   body {
     font: 16px system-ui, sans-serif;
-    max-width: 1040px;
+    max-width: 1120px;
     margin: 32px auto;
     padding: 0 16px;
     line-height: 1.45;
@@ -92,15 +92,15 @@
   <h2>What this tests</h2>
 
   <p>
-    This page tests whether storage written by a third-party iframe is cleared
-    after the embedding first-party site is closed, navigated away from, or after
-    a full browser restart.
+    This page tests whether state written by a third-party iframe is cleared
+    after the embedding first-party site is closed, navigated away from, or
+    after a full browser restart.
   </p>
 
   <p>
     The top-level page is the first-party site. The iframe is the third-party
-    site. The iframe writes a unique token into several storage mechanisms, then
-    this page checks whether that token can still be read.
+    site. The iframe writes unique values into storage APIs and cacheable
+    resources, then this page checks whether those values can still be read.
   </p>
 </section>
 
@@ -109,27 +109,21 @@
 
   <ul>
     <li>
-      <strong>Same-session phase:</strong> stored values should be present.
-      This confirms the test can write and read third-party storage during the
-      active first-party session.
+      <strong>Same-session phase:</strong> values should be present. This
+      confirms the test can write and read third-party state during the active
+      first-party session.
     </li>
     <li>
-      <strong>After-close phase:</strong> stored values should be absent.
-      If the same token is still present, the third-party storage partition
-      survived after the first-party site went away.
+      <strong>After-close phase:</strong> values should be absent or changed. If
+      the same value is still present, third-party state survived after the
+      first-party site went away.
     </li>
     <li>
-      <strong>After-restart phase:</strong> stored values should be absent.
-      If the same token is still present after restarting the browser, the
+      <strong>After-restart phase:</strong> values should be absent or changed.
+      If the same value is still present after restarting the browser, the
       third-party state survived across browser sessions.
     </li>
   </ul>
-
-  <p>
-    A browser passes the ephemeral-storage claim only if storage is readable
-    during the same first-party session and cleared after the first-party site
-    is gone.
-  </p>
 
   <p>
     Before running the after-close test, close any other tabs open to this
@@ -189,12 +183,31 @@
 const TEST_PATH = "/ephemeral-3p-clearing/";
 const params = new URLSearchParams(location.search);
 
+const TESTS = [
+  { key: "altSvc", label: "Alt-Svc" },
+  { key: "cacheStorage", label: "CacheStorage" },
+  { key: "cookieHTTP", label: "cookie (HTTP)" },
+  { key: "cookieJS", label: "cookie (JS)" },
+  { key: "cookieStore", label: "CookieStore" },
+  { key: "cssCache", label: "CSS cache" },
+  { key: "faviconCache", label: "favicon cache" },
+  { key: "fetchCache", label: "fetch cache" },
+  { key: "fontCache", label: "font cache" },
+  { key: "iframeCache", label: "iframe cache" },
+  { key: "imageCache", label: "image cache" },
+  { key: "indexedDB", label: "indexedDB" },
+  { key: "localStorage", label: "localStorage" },
+  { key: "prefetchCache", label: "prefetch cache" },
+  { key: "scriptCache", label: "script cache" },
+  { key: "xhrCache", label: "XMLHttpRequest cache" },
+];
+
 const childOrigin = new URL(
   params.get("childOrigin") || "https://test-website-b.pages.dev"
 ).origin;
 
 let token = params.get("token") || crypto.randomUUID();
-let baselineFetchBody = params.get("fetchBody") || "";
+let baselines = parseBaselines(params.get("baselines"));
 
 document.getElementById("top-origin").textContent = location.origin;
 document.getElementById("child-origin").textContent = childOrigin;
@@ -214,6 +227,16 @@ const frameUrl = new URL(`${TEST_PATH}frame.html`, childOrigin);
 frameUrl.searchParams.set("parentOrigin", location.origin);
 frame.src = frameUrl.href;
 
+function parseBaselines(value) {
+  if (!value) return {};
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
 function log(value) {
   out.textContent = typeof value === "string"
     ? value
@@ -229,7 +252,7 @@ async function callFrame(cmd, payload = {}) {
     const timeout = setTimeout(() => {
       window.removeEventListener("message", onMessage);
       reject(new Error(`Timed out waiting for ${cmd}`));
-    }, 8000);
+    }, 12000);
 
     function onMessage(event) {
       if (event.origin !== childOrigin) return;
@@ -256,8 +279,16 @@ function valueOf(cell) {
   return undefined;
 }
 
+function isHarnessUnsupported(cell) {
+  return Boolean(cell && cell.harnessUnsupported);
+}
+
 function errorOf(cell) {
   return cell && !cell.ok ? cell.error : "";
+}
+
+function hasBaseline(value) {
+  return value !== undefined && value !== null && value !== "";
 }
 
 function isCleanupPhase(phase) {
@@ -269,176 +300,121 @@ function cleanupPhrase(phase) {
   return "after first-party site went away";
 }
 
-function classifyTokenStorage(name, cell, expectedToken, phase) {
+function buildBaselines(writeResult) {
+  const next = {};
+
+  for (const test of TESTS) {
+    const value = valueOf(writeResult[test.key]);
+
+    if (hasBaseline(value)) {
+      next[test.key] = value;
+    }
+  }
+
+  return next;
+}
+
+function classify(test, cell, phase) {
+  const baseline = baselines[test.key];
   const value = valueOf(cell);
   const error = errorOf(cell);
 
+  if (isHarnessUnsupported(cell)) {
+    return {
+      label: test.label,
+      cssClass: "warn",
+      verdict: "UNSUPPORTED BY THIS HARNESS",
+      detail: error,
+    };
+  }
+
+  if (phase === "manual-read") {
+    return {
+      label: test.label,
+      cssClass: cell && cell.ok ? "warn" : "fail",
+      verdict: cell && cell.ok ? "OBSERVED" : "ERROR",
+      detail: cell && cell.ok ? value : error,
+    };
+  }
+
+  if (!hasBaseline(baseline)) {
+    return {
+      label: test.label,
+      cssClass: "warn",
+      verdict: "INCONCLUSIVE: no successful write baseline",
+      detail: cell && cell.ok ? value : error,
+    };
+  }
+
   if (phase === "same-session") {
-    if (value === expectedToken) {
+    if (cell && cell.ok && value === baseline) {
       return {
-        name,
-        status: "PASS",
-        verdict: "PASS: storage works in-session",
+        label: test.label,
         cssClass: "pass",
+        verdict: "PASS: value works in-session",
         detail: value,
       };
     }
 
-    if (value === null || value === undefined || value === "") {
+    if (cell && cell.ok) {
       return {
-        name,
-        status: "INCONCLUSIVE",
-        verdict: "INCONCLUSIVE: storage unavailable or blocked in-session",
+        label: test.label,
         cssClass: "warn",
-        detail: error || value,
+        verdict: "INCONCLUSIVE: value was not reused in-session",
+        detail: value,
       };
     }
 
     return {
-      name,
-      status: "INCONCLUSIVE",
-      verdict: "INCONCLUSIVE: unexpected value in-session",
+      label: test.label,
       cssClass: "warn",
-      detail: value,
+      verdict: "INCONCLUSIVE: unavailable or blocked in-session",
+      detail: error,
     };
   }
 
   if (isCleanupPhase(phase)) {
-    if (value === expectedToken) {
+    if (cell && cell.ok && value === baseline) {
       return {
-        name,
-        status: "FAIL",
-        verdict: `FAIL: third-party storage survived ${cleanupPhrase(phase)}`,
+        label: test.label,
         cssClass: "fail",
+        verdict: `FAIL: value survived ${cleanupPhrase(phase)}`,
         detail: value,
       };
     }
 
-    if (value === null || value === undefined || value === "") {
+    if (cell && cell.ok) {
       return {
-        name,
-        status: "PASS",
-        verdict: `PASS: third-party storage was cleared ${cleanupPhrase(phase)}`,
+        label: test.label,
         cssClass: "pass",
-        detail: error || value,
+        verdict: `PASS: old value was not reused ${cleanupPhrase(phase)}`,
+        detail: value,
       };
     }
 
     return {
-      name,
-      status: "PASS",
-      verdict: "PASS: old token was not reused",
+      label: test.label,
       cssClass: "pass",
-      detail: value,
+      verdict: `PASS: old value was not readable ${cleanupPhrase(phase)}`,
+      detail: error,
     };
   }
 
   return {
-    name,
-    status: "OBSERVED",
-    verdict: `OBSERVED: ${String(value)}`,
+    label: test.label,
     cssClass: "warn",
+    verdict: "OBSERVED",
     detail: value,
   };
 }
 
-function classifyHttpFetch(cell, baseline, phase) {
-  const value = valueOf(cell);
-  const error = errorOf(cell);
-
-  if (!baseline) {
-    return {
-      name: "HTTP fetch cache",
-      status: "INCONCLUSIVE",
-      verdict: "INCONCLUSIVE: no baseline cached response",
-      cssClass: "warn",
-      detail: "Run write first.",
-    };
-  }
-
-  if (!value || !value.body) {
-    if (isCleanupPhase(phase)) {
-      return {
-        name: "HTTP fetch cache",
-        status: "PASS",
-        verdict: "PASS: cached response was not reused",
-        cssClass: "pass",
-        detail: error || value,
-      };
-    }
-
-    return {
-      name: "HTTP fetch cache",
-      status: "INCONCLUSIVE",
-      verdict: "INCONCLUSIVE: fetch cache unavailable or blocked",
-      cssClass: "warn",
-      detail: error || value,
-    };
-  }
-
-  if (phase === "same-session") {
-    if (value.body === baseline) {
-      return {
-        name: "HTTP fetch cache",
-        status: "PASS",
-        verdict: "PASS: cached response works in-session",
-        cssClass: "pass",
-        detail: value.body,
-      };
-    }
-
-    return {
-      name: "HTTP fetch cache",
-      status: "INCONCLUSIVE",
-      verdict: "INCONCLUSIVE: cached response was not reused in-session",
-      cssClass: "warn",
-      detail: value.body,
-    };
-  }
-
-  if (isCleanupPhase(phase)) {
-    if (value.body === baseline) {
-      return {
-        name: "HTTP fetch cache",
-        status: "FAIL",
-        verdict: `FAIL: cached response survived ${cleanupPhrase(phase)}`,
-        cssClass: "fail",
-        detail: value.body,
-      };
-    }
-
-    return {
-      name: "HTTP fetch cache",
-      status: "PASS",
-      verdict: "PASS: old cached response was not reused",
-      cssClass: "pass",
-      detail: value.body,
-    };
-  }
-
-  return {
-    name: "HTTP fetch cache",
-    status: "OBSERVED",
-    verdict: "OBSERVED",
-    cssClass: "warn",
-    detail: value.body,
-  };
-}
-
 function renderComparison(result, phase) {
-  const rows = [
-    classifyTokenStorage("localStorage", result.localStorage, token, phase),
-    classifyTokenStorage("cookie JS", result.cookie, token, phase),
-    classifyTokenStorage("cookie HTTP", result.httpCookie, token, phase),
-    classifyTokenStorage("IndexedDB", result.indexedDB, token, phase),
-    classifyTokenStorage("CacheStorage", result.cacheStorage, token, phase),
-    classifyHttpFetch(result.httpFetch, baselineFetchBody, phase),
-  ];
+  const rows = TESTS.map((test) => classify(test, result[test.key], phase));
 
   const phaseLabel = {
-    "same-session": "Same-session phase: storage should be present.",
-    "after-close": "After-close phase: storage should be absent.",
-    "after-restart": "After-restart phase: storage should be absent.",
+    "same-session": "Same-session phase: values should be present.",
+    "after-close": "After-close phase: values should be absent or changed.",
+    "after-restart": "After-restart phase: values should be absent or changed.",
     "manual-read": "Manual read: observed values only.",
   }[phase] || "Observed values.";
 
@@ -448,7 +424,7 @@ function renderComparison(result, phase) {
     <table>
       <thead>
         <tr>
-          <th>Storage mechanism</th>
+          <th>Test</th>
           <th>Verdict</th>
           <th>Observed detail</th>
         </tr>
@@ -456,7 +432,7 @@ function renderComparison(result, phase) {
       <tbody>
         ${rows.map((row) => `
           <tr>
-            <td>${escapeHtml(row.name)}</td>
+            <td>${escapeHtml(row.label)}</td>
             <td class="${row.cssClass}">${escapeHtml(row.verdict)}</td>
             <td><code>${escapeHtml(formatDetail(row.detail))}</code></td>
           </tr>
@@ -465,7 +441,7 @@ function renderComparison(result, phase) {
     </table>
   `;
 
-  log({ phase, token, baselineFetchBody, result, interpreted: rows });
+  log({ phase, token, baselines, result, interpreted: rows });
 }
 
 function formatDetail(value) {
@@ -489,7 +465,7 @@ function makeReturnUrl(phase) {
   returnUrl.searchParams.set("phase", phase);
   returnUrl.searchParams.set("token", token);
   returnUrl.searchParams.set("childOrigin", childOrigin);
-  returnUrl.searchParams.set("fetchBody", baselineFetchBody);
+  returnUrl.searchParams.set("baselines", JSON.stringify(baselines));
   return returnUrl;
 }
 
@@ -499,7 +475,7 @@ async function writeAndRead() {
   restartInstructions.innerHTML = "";
 
   const writeResult = await callFrame("write", { token });
-  baselineFetchBody = valueOf(writeResult.httpFetch)?.body || baselineFetchBody;
+  baselines = buildBaselines(writeResult);
 
   const readResult = await callFrame("read", { token });
   renderComparison(readResult, "same-session");
@@ -508,7 +484,7 @@ async function writeAndRead() {
 }
 
 async function bounceAwayAndReturn() {
-  if (!baselineFetchBody) {
+  if (Object.keys(baselines).length === 0) {
     await writeAndRead();
   }
 
@@ -521,7 +497,7 @@ async function bounceAwayAndReturn() {
 }
 
 async function prepareRestartTest() {
-  if (!baselineFetchBody) {
+  if (Object.keys(baselines).length === 0) {
     await writeAndRead();
   }
 
@@ -542,7 +518,7 @@ async function prepareRestartTest() {
     </section>
   `;
 
-  log({ restartUrl, token, baselineFetchBody });
+  log({ restartUrl, token, baselines });
 }
 
 async function readOnly(phase = "manual-read") {
@@ -571,6 +547,7 @@ document.getElementById("clear").onclick = async () => {
   phaseEl.textContent = "Clear command sent to third-party frame.";
   summary.textContent = "";
   restartInstructions.innerHTML = "";
+  baselines = {};
   log(result);
 };
 
