@@ -5,6 +5,7 @@ set -euo pipefail
 
 SITE_NAME="Test Website A"
 SITE_DOMAIN="test-website-a.pages.dev"
+GITHUB_REPO_URL="https://github.com/ShivanKaul/test-website-a"
 OTHER_SITE_NAME="Test Website B"
 OTHER_SITE_URL="https://test-website-b.pages.dev"
 
@@ -76,7 +77,7 @@ cat > index.html <<HTMLEOF
 <body>
   <header>
     <h1>${SITE_NAME}</h1>
-    <p><code>${SITE_DOMAIN}</code> &mdash; ${count} tests</p>
+    <p><code>${SITE_DOMAIN}</code> &mdash; ${count} tests &mdash; <a href="${GITHUB_REPO_URL}">GitHub</a></p>
     <p>See also: <a href="${OTHER_SITE_URL}">${OTHER_SITE_NAME}</a></p>
   </header>
 ${cards}
