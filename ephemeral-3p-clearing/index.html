@@ -104,8 +104,8 @@
 
   <p>
     The top-level page is the first-party site. The iframe is the third-party
-    site. The iframe writes unique values into storage APIs and cacheable
-    resources, then this page checks whether those values can still be read.
+    site. The iframe writes unique values into storage APIs, then this
+    page checks whether those values can still be read.
   </p>
 </section>
 
@@ -121,12 +121,20 @@
     <li>
       <strong>After-close phase:</strong> values should be absent or changed. If
       the same value is still present, third-party state survived after the
-      first-party site went away.
+      first-party site went away. Brave clears ephemeral third-party storage
+      when the last top-level tab for the embedding first-party origin is closed
+      or navigated away, after a 30-second grace period
+      (<a href="https://brave.com/privacy-updates/7-ephemeral-storage/">Brave blog</a>,
+      <a href="https://github.com/brave/brave-browser/wiki/Ephemeral-Storage-Design">design doc</a>).
     </li>
     <li>
       <strong>After-restart phase:</strong> values should be absent or changed.
       If the same value is still present after restarting the browser, the
-      third-party state survived across browser sessions.
+      third-party state survived across browser sessions. Safari keeps
+      partitioned third-party storage in memory only and clears it when the
+      browser quits
+      (<a href="https://webkit.org/tracking-prevention/">WebKit Tracking Prevention</a>,
+      <a href="https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/">Full Third-Party Cookie Blocking</a>).
     </li>
   </ul>
 
@@ -189,18 +197,11 @@ const TEST_PATH = "/ephemeral-3p-clearing/";
 const params = new URLSearchParams(location.search);
 
 const TESTS = [
-  { key: "cacheStorage", label: "CacheStorage" },
   { key: "cookieHTTP", label: "cookie (HTTP)" },
   { key: "cookieJS", label: "cookie (JS)" },
   { key: "cookieStore", label: "CookieStore" },
-  { key: "cssCache", label: "CSS cache" },
-  { key: "fetchCache", label: "fetch cache" },
-  { key: "iframeCache", label: "iframe cache" },
-  { key: "imageCache", label: "image cache" },
   { key: "indexedDB", label: "indexedDB" },
   { key: "localStorage", label: "localStorage" },
-  { key: "scriptCache", label: "script cache" },
-  { key: "xhrCache", label: "XMLHttpRequest cache" },
 ];
 
 const childOrigin = new URL(
