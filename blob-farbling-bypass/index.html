@@ -173,13 +173,6 @@
 <body>
     <h2>Blob URL Farbling Bypass</h2>
     <p>
-        Brave's fingerprinting protections (farbling) are controlled by Shields.
-        When a blob: URL is opened in a new tab, <code>GetBraveShieldsEnabled()</code>
-        checks <code>url.SchemeIsHTTPOrHTTPS()</code> on the raw blob URL. Since
-        <code>blob:</code> is not HTTP/HTTPS, Shields returns disabled and farbling
-        is set to OFF, even though the blob page inherits its creator's origin.
-    </p>
-    <p>
         Click the button below. This will:
     </p>
     <ol>
