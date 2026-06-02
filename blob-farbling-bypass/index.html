@@ -200,18 +200,23 @@
 
     <details>
         <summary>How it works</summary>
-        <pre>// 1. Create a blob URL pointing to an HTML page with inline JS
+        <pre>// 1. Build an HTML document whose inline script reads fingerprint
+//    values, writes them to localStorage, and closes the tab.
+let html = '&lt;script&gt;'
+  + 'localStorage.setItem("real_screen_width", screen.width);'
+  + 'localStorage.setItem("real_screen_height", screen.height);'
+  + 'window.close();'
+  + '&lt;/script&gt;';
+
+// 2. Create a blob URL from that HTML.
 let blob = new Blob([html], { type: 'text/html' });
 let blobUrl = URL.createObjectURL(blob);
 
-// 2. Open it in a new tab (user gesture required)
+// 3. Open it in a new tab (user gesture required).
+//    The blob page runs, exfiltrates via localStorage, and closes itself.
 window.open(blobUrl, '_blank');
 
-// 3. Blob page JS runs, reads unfarbled values, exfiltrates via localStorage
-localStorage.setItem('real_screen_width', window.screen.width);
-window.close();
-
-// 4. Main page reads the real values back
+// 4. Main page reads the real (unfarbled) values back.
 let realWidth = localStorage.getItem('real_screen_width');</pre>
         <p>
             The blob page is same-origin with the creator
