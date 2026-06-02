@@ -114,6 +114,7 @@
         }
 
         function renderTable(mainVals, blobVals) {
+            document.getElementById('resultsTable').style.display = '';
             let tbody = document.getElementById('results');
             tbody.innerHTML = '';
             let hasMismatch = false;
@@ -189,7 +190,7 @@
     </ol>
     <button onclick="runTest()">Run Test</button>
     <p id="status"></p>
-    <table>
+    <table id="resultsTable" style="display:none;">
         <thead>
             <tr><th>Property</th><th>Main Page (farbled)</th><th>Blob Page (unfarbled)</th><th>Match?</th></tr>
         </thead>
