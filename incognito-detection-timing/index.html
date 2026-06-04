@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Incognito Detection via Timing Side-Channels</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; }
+    h1,h2 { margin: 0 0 10px 0; }
+    p { margin: 8px 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
+    .pass { border-color: rgba(0,160,0,0.7); }
+    .fail { border-color: rgba(200,0,0,0.7); }
+    .neutral { border-color: rgba(200,140,0,0.8); }
+    button {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(127,127,127,0.35);
+      background: rgba(127,127,127,0.12);
+      color: inherit;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    button:hover { background: rgba(127,127,127,0.18); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    pre { padding: 12px; border-radius: 10px; overflow: auto; background: rgba(127,127,127,0.14); margin: 0; white-space: pre-wrap; word-break: break-all; }
+    .small { opacity: 0.85; font-size: 0.9em; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(127,127,127,0.2); }
+    th { opacity: 0.7; font-size: 0.85em; text-transform: uppercase; }
+    td.mono { font-size: 0.9em; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; }
+    .tag-normal { background: rgba(0,160,0,0.15); color: rgba(0,140,0,1); }
+    .tag-incognito { background: rgba(200,0,0,0.15); color: rgba(180,0,0,1); }
+    .tag-neutral { background: rgba(200,140,0,0.15); color: rgba(160,110,0,1); }
+    .tag-error { background: rgba(127,127,127,0.15); color: rgba(127,127,127,1); }
+    .tag-running { background: rgba(50,100,200,0.15); color: rgba(50,100,200,1); }
+    @media (prefers-color-scheme: dark) {
+      .tag-normal { color: rgba(80,220,80,1); }
+      .tag-incognito { color: rgba(255,100,100,1); }
+      .tag-neutral { color: rgba(240,190,60,1); }
+      .tag-error { color: rgba(180,180,180,1); }
+      .tag-running { color: rgba(100,160,255,1); }
+    }
+    .method-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .method-header h2 { margin: 0; flex: 1; }
+    .verdict-slot { min-width: 100px; text-align: right; }
+    .detail-row { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>Incognito Detection via Timing Side-Channels</h1>
+
+  <div class="card">
+    <p class="small">
+      Three methods that exploit timing differences between disk-backed (normal) and
+      in-memory (private/incognito) storage to detect browsing mode. In normal mode,
+      operations that flush to disk are measurably slower. In incognito mode, all storage
+      is in-memory, so these operations complete much faster.
+    </p>
+    <p class="small">
+      <b>How to use:</b> Click "Run all tests" or run each method individually.
+      Compare verdicts between a normal window and a private window.
+    </p>
+    <p class="small">
+      Reported by
+      <a href="https://github.com/1Jesper1">@1Jesper1</a> in
+      <a href="https://github.com/brave/brave-browser/issues/56009">brave-browser#56009</a>.
+      Original detection techniques from
+      <a href="https://issues.chromium.org/issues/515090580">crbug.com/515090580</a>.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runAllBtn">Run all tests</button>
+  </div>
+
+  <!-- Method 1: IndexedDB Strict/Relaxed Pair Ratio -->
+  <div class="card" id="idbCard">
+    <div class="method-header">
+      <h2>Method 1: IndexedDB Strict/Relaxed Pair Ratio</h2>
+      <div class="verdict-slot" id="idbVerdict"></div>
+    </div>
+    <p class="small">
+      Writes 4 KB to IndexedDB with <code>durability: "strict"</code> (fsync to disk) and
+      <code>durability: "relaxed"</code> (OS buffer only), then computes the ratio of
+      strict-to-relaxed write times. In normal mode the ratio is high (&gt;2.0) because
+      strict actually flushes. In incognito, both are in-memory so the ratio approaches 1.0.
+    </p>
+    <p class="small detail-row">
+      <b>Thresholds:</b> ratio &lt; 1.20 = incognito, ratio &gt; 2.00 = normal, otherwise neutral.
+    </p>
+    <div class="detail-row" id="idbDetail" style="display:none;">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody id="idbDetailBody"></tbody>
+      </table>
+    </div>
+    <button id="idbBtn">Run Method 1</button>
+  </div>
+
+  <!-- Method 2: OPFS SyncAccessHandle Explicit Flush Timing -->
+  <div class="card" id="opfsCard">
+    <div class="method-header">
+      <h2>Method 2: OPFS SyncAccessHandle Flush Timing</h2>
+      <div class="verdict-slot" id="opfsVerdict"></div>
+    </div>
+    <p class="small">
+      Uses a Web Worker with the Origin Private File System to write 512 KB chunks and
+      measure <code>flush()</code> latency. In normal mode, flush forces data to disk
+      (&gt;0.80 ms). In incognito, storage is in-memory so flush is nearly instant (&lt;0.05 ms).
+    </p>
+    <p class="small detail-row">
+      <b>Thresholds:</b> median flush &lt; 0.05 ms = incognito, &gt; 0.80 ms = normal, otherwise neutral.
+    </p>
+    <div class="detail-row" id="opfsDetail" style="display:none;">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody id="opfsDetailBody"></tbody>
+      </table>
+    </div>
+    <button id="opfsBtn">Run Method 2</button>
+  </div>
+
+  <!-- Method 3: CacheStorage openNewSingle / openNewBatch -->
+  <div class="card" id="cacheCard">
+    <div class="method-header">
+      <h2>Method 3: CacheStorage Open Timing</h2>
+      <div class="verdict-slot" id="cacheVerdict"></div>
+    </div>
+    <p class="small">
+      Opens and immediately deletes CacheStorage entries, measuring the time taken. In normal
+      mode, cache operations use a disk-backed backend (slower). In incognito, the backend is
+      entirely in-memory (faster). Two sub-tests: <code>openNewSingle</code> (one cache at a
+      time) and <code>openNewBatch</code> (3 caches per iteration).
+    </p>
+    <p class="small detail-row">
+      <b>Thresholds:</b> single median &lt; 3.76 ms = incognito; batch median &lt; 13.74 ms = incognito.
+    </p>
+    <div class="detail-row" id="cacheDetail" style="display:none;">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody id="cacheDetailBody"></tbody>
+      </table>
+    </div>
+    <button id="cacheBtn">Run Method 3</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="card" id="summaryCard" style="display:none;">
+    <h2>Summary</h2>
+    <table>
+      <thead>
+        <tr><th>Method</th><th>Measurement</th><th>Verdict</th></tr>
+      </thead>
+      <tbody id="summaryBody"></tbody>
+    </table>
+    <div id="overallVerdict" style="margin-top: 10px;"></div>
+  </div>
+
+  <div class="card" id="rawCard" style="display:none;">
+    <h2>Raw log</h2>
+    <pre id="rawLog"></pre>
+  </div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var rawLog = $('rawLog');
+
+  function log(s) {
+    $('rawCard').style.display = 'block';
+    var line = '[' + new Date().toISOString() + '] ' + s;
+    rawLog.textContent += line + '\n';
+  }
+
+  function median(arr) {
+    if (!arr || !arr.length) return 0;
+    var s = arr.slice().sort(function (a, b) { return a - b; });
+    var m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  function setVerdict(el, verdict) {
+    var cls = 'tag tag-' + verdict;
+    var label = verdict === 'incognito' ? 'INCOGNITO' :
+                verdict === 'normal' ? 'NORMAL' :
+                verdict === 'neutral' ? 'NEUTRAL' :
+                verdict === 'running' ? 'RUNNING...' : 'ERROR';
+    el.innerHTML = '<span class="' + cls + '">' + label + '</span>';
+  }
+
+  function addDetailRow(tbody, metric, value) {
+    var tr = document.createElement('tr');
+    var tdM = document.createElement('td');
+    tdM.textContent = metric;
+    var tdV = document.createElement('td');
+    tdV.className = 'mono';
+    tdV.textContent = value;
+    tr.appendChild(tdM);
+    tr.appendChild(tdV);
+    tbody.appendChild(tr);
+  }
+
+  function updateCardBorder(cardId, verdict) {
+    var card = $(cardId);
+    card.classList.remove('pass', 'fail', 'neutral');
+    if (verdict === 'normal') card.classList.add('pass');
+    else if (verdict === 'incognito') card.classList.add('fail');
+    else if (verdict === 'neutral') card.classList.add('neutral');
+  }
+
+  // ---- Method 1: IndexedDB Strict/Relaxed Pair Ratio ----
+
+  function openIDB(name) {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(name, 1);
+      req.onupgradeneeded = function (ev) { ev.target.result.createObjectStore('data'); };
+      req.onsuccess = function (ev) { resolve(ev.target.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function idbWrite(db, key, data, durability) {
+    return new Promise(function (resolve, reject) {
+      var options = (typeof IDBTransaction !== 'undefined' && 'durability' in IDBTransaction.prototype)
+        ? { durability: durability } : {};
+      var tx = db.transaction('data', 'readwrite', options);
+      tx.objectStore('data').put(data, key);
+      tx.oncomplete = function () { resolve(); };
+      tx.onerror = function () { reject(tx.error); };
+      tx.onabort = function () { reject(tx.error); };
+    });
+  }
+
+  async function runIDB() {
+    var DB_NAME = '__incognito_idb_probe__';
+    var data = new Uint8Array(4096);
+    var db = await openIDB(DB_NAME);
+    var pairRatios = [];
+    for (var i = 0; i < 20; i++) {
+      var t0 = performance.now();
+      await idbWrite(db, 'r' + i, data, 'relaxed');
+      var relMs = performance.now() - t0;
+      var t1 = performance.now();
+      await idbWrite(db, 's' + i, data, 'strict');
+      var strMs = performance.now() - t1;
+      pairRatios.push(relMs > 0 ? strMs / relMs : 1);
+    }
+    db.close();
+    indexedDB.deleteDatabase(DB_NAME);
+    var medRatio = median(pairRatios);
+    var verdict = medRatio < 1.20 ? 'incognito' : medRatio > 2.00 ? 'normal' : 'neutral';
+    return { medRatio: medRatio, ratios: pairRatios, verdict: verdict };
+  }
+
+  // ---- Method 2: OPFS SyncAccessHandle Flush Timing ----
+
+  async function runOPFS() {
+    if (!navigator.storage || !navigator.storage.getDirectory) {
+      return { error: 'OPFS not supported' };
+    }
+    var workerSrc = [
+      'self.onmessage = async function () {',
+      '  try {',
+      '    var chunk = new Uint8Array(512 * 1024).fill(0xA5);',
+      '    var root = await navigator.storage.getDirectory();',
+      '    var fh = await root.getFileHandle("__incognito_opfs_probe__", { create: true });',
+      '    var sync = await fh.createSyncAccessHandle();',
+      '    sync.write(chunk, { at: 0 }); sync.flush();',
+      '    var timings = [];',
+      '    for (var i = 0; i < 6; i++) {',
+      '      sync.write(chunk, { at: (i + 1) * chunk.byteLength });',
+      '      var t0 = performance.now(); sync.flush(); timings.push(performance.now() - t0);',
+      '    }',
+      '    sync.close();',
+      '    await root.removeEntry("__incognito_opfs_probe__").catch(function () {});',
+      '    self.postMessage({ timings: timings });',
+      '  } catch (e) { self.postMessage({ error: e.message }); }',
+      '};'
+    ].join('\n');
+
+    return new Promise(function (resolve) {
+      var blob = new Blob([workerSrc], { type: 'text/javascript' });
+      var worker = new Worker(URL.createObjectURL(blob));
+      worker.onmessage = function (ev) {
+        worker.terminate();
+        if (!ev.data.timings) return resolve({ error: ev.data.error || 'Worker error' });
+        var med = median(ev.data.timings);
+        var verdict = med < 0.05 ? 'incognito' : med > 0.80 ? 'normal' : 'neutral';
+        resolve({ medFlushMs: med, timings: ev.data.timings, verdict: verdict });
+      };
+      worker.onerror = function (ev) {
+        worker.terminate();
+        resolve({ error: ev.message || 'Worker error' });
+      };
+      worker.postMessage(null);
+    });
+  }
+
+  // ---- Method 3: CacheStorage Open Timing ----
+
+  var CACHE_THRESHOLD_SINGLE = 3.759375;
+  var CACHE_THRESHOLD_BATCH = 13.73625;
+  var CACHE_ITER = 6;
+  var CACHE_DELAY = 20;
+  var CACHE_BATCH_SIZE = 3;
+
+  async function runCacheSingle() {
+    if (!('caches' in window)) return { error: 'CacheStorage not supported' };
+    try { await caches.open('__probe_warmup__'); } catch (e) {}
+    var times = [];
+    for (var i = 0; i < CACHE_ITER; i++) {
+      var name = '__probe_single_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      var t0 = performance.now();
+      try { await caches.open(name); await caches.delete(name); } catch (e) {}
+      times.push(performance.now() - t0);
+      if (CACHE_DELAY) await new Promise(function (r) { setTimeout(r, CACHE_DELAY); });
+    }
+    var med = median(times);
+    return { medMs: med, times: times, threshold: CACHE_THRESHOLD_SINGLE,
+             verdict: med >= CACHE_THRESHOLD_SINGLE ? 'normal' : 'incognito' };
+  }
+
+  async function runCacheBatch() {
+    if (!('caches' in window)) return { error: 'CacheStorage not supported' };
+    var times = [];
+    for (var i = 0; i < CACHE_ITER; i++) {
+      var t0 = performance.now();
+      for (var j = 0; j < CACHE_BATCH_SIZE; j++) {
+        var name = '__probe_batch_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + j;
+        try { await caches.open(name); await caches.delete(name); } catch (e) {}
+      }
+      times.push(performance.now() - t0);
+      if (CACHE_DELAY) await new Promise(function (r) { setTimeout(r, CACHE_DELAY); });
+    }
+    var med = median(times);
+    return { medMs: med, times: times, threshold: CACHE_THRESHOLD_BATCH,
+             verdict: med >= CACHE_THRESHOLD_BATCH ? 'normal' : 'incognito' };
+  }
+
+  // ---- UI handlers ----
+
+  var results = {};
+
+  async function handleIDB() {
+    $('idbBtn').disabled = true;
+    setVerdict($('idbVerdict'), 'running');
+    log('Running Method 1: IndexedDB Strict/Relaxed Pair Ratio...');
+    try {
+      var r = await runIDB();
+      results.idb = r;
+      setVerdict($('idbVerdict'), r.verdict);
+      updateCardBorder('idbCard', r.verdict);
+      var body = $('idbDetailBody');
+      body.innerHTML = '';
+      addDetailRow(body, 'Median strict/relaxed ratio', r.medRatio.toFixed(3));
+      addDetailRow(body, 'All ratios', r.ratios.map(function (x) { return x.toFixed(3); }).join(', '));
+      addDetailRow(body, 'Verdict', r.verdict);
+      $('idbDetail').style.display = 'block';
+      log('Method 1 result: ratio=' + r.medRatio.toFixed(3) + ', verdict=' + r.verdict);
+    } catch (e) {
+      setVerdict($('idbVerdict'), 'error');
+      log('Method 1 error: ' + e);
+      results.idb = { error: String(e), verdict: 'error' };
+    }
+    $('idbBtn').disabled = false;
+  }
+
+  async function handleOPFS() {
+    $('opfsBtn').disabled = true;
+    setVerdict($('opfsVerdict'), 'running');
+    log('Running Method 2: OPFS SyncAccessHandle Flush Timing...');
+    try {
+      var r = await runOPFS();
+      if (r.error) {
+        setVerdict($('opfsVerdict'), 'error');
+        var body = $('opfsDetailBody');
+        body.innerHTML = '';
+        addDetailRow(body, 'Error', r.error);
+        $('opfsDetail').style.display = 'block';
+        log('Method 2 error: ' + r.error);
+        results.opfs = { error: r.error, verdict: 'error' };
+      } else {
+        results.opfs = r;
+        setVerdict($('opfsVerdict'), r.verdict);
+        updateCardBorder('opfsCard', r.verdict);
+        var body = $('opfsDetailBody');
+        body.innerHTML = '';
+        addDetailRow(body, 'Median flush time', r.medFlushMs.toFixed(3) + ' ms');
+        addDetailRow(body, 'All timings (ms)', r.timings.map(function (x) { return x.toFixed(3); }).join(', '));
+        addDetailRow(body, 'Verdict', r.verdict);
+        $('opfsDetail').style.display = 'block';
+        log('Method 2 result: medFlush=' + r.medFlushMs.toFixed(3) + ' ms, verdict=' + r.verdict);
+      }
+    } catch (e) {
+      setVerdict($('opfsVerdict'), 'error');
+      log('Method 2 error: ' + e);
+      results.opfs = { error: String(e), verdict: 'error' };
+    }
+    $('opfsBtn').disabled = false;
+  }
+
+  async function handleCache() {
+    $('cacheBtn').disabled = true;
+    setVerdict($('cacheVerdict'), 'running');
+    log('Running Method 3: CacheStorage Open Timing...');
+    try {
+      var single = await runCacheSingle();
+      var batch = await runCacheBatch();
+      // Overall: incognito if either sub-test says incognito
+      var verdict = (single.verdict === 'incognito' || batch.verdict === 'incognito') ? 'incognito' :
+                    (single.error || batch.error) ? 'error' : 'normal';
+      results.cache = { single: single, batch: batch, verdict: verdict };
+      setVerdict($('cacheVerdict'), verdict);
+      updateCardBorder('cacheCard', verdict);
+      var body = $('cacheDetailBody');
+      body.innerHTML = '';
+      addDetailRow(body, 'openNewSingle median', (single.medMs || 0).toFixed(3) + ' ms (threshold: ' + CACHE_THRESHOLD_SINGLE.toFixed(2) + ' ms)');
+      addDetailRow(body, 'openNewSingle verdict', single.verdict || single.error);
+      addDetailRow(body, 'openNewSingle times (ms)', (single.times || []).map(function (x) { return x.toFixed(3); }).join(', '));
+      addDetailRow(body, 'openNewBatch median', (batch.medMs || 0).toFixed(3) + ' ms (threshold: ' + CACHE_THRESHOLD_BATCH.toFixed(2) + ' ms)');
+      addDetailRow(body, 'openNewBatch verdict', batch.verdict || batch.error);
+      addDetailRow(body, 'openNewBatch times (ms)', (batch.times || []).map(function (x) { return x.toFixed(3); }).join(', '));
+      addDetailRow(body, 'Overall verdict', verdict);
+      $('cacheDetail').style.display = 'block';
+      log('Method 3 result: single=' + (single.medMs || 0).toFixed(3) + ' ms (' + (single.verdict || single.error) + '), batch=' + (batch.medMs || 0).toFixed(3) + ' ms (' + (batch.verdict || batch.error) + '), overall=' + verdict);
+    } catch (e) {
+      setVerdict($('cacheVerdict'), 'error');
+      log('Method 3 error: ' + e);
+      results.cache = { error: String(e), verdict: 'error' };
+    }
+    $('cacheBtn').disabled = false;
+  }
+
+  function showSummary() {
+    var summaryCard = $('summaryCard');
+    var summaryBody = $('summaryBody');
+    summaryBody.innerHTML = '';
+    summaryCard.style.display = 'block';
+
+    var methods = [
+      { name: 'IndexedDB Strict/Relaxed Ratio', key: 'idb',
+        measurement: results.idb ? (results.idb.error || ('ratio: ' + results.idb.medRatio.toFixed(3))) : 'not run' },
+      { name: 'OPFS SyncAccessHandle Flush', key: 'opfs',
+        measurement: results.opfs ? (results.opfs.error || ('flush: ' + results.opfs.medFlushMs.toFixed(3) + ' ms')) : 'not run' },
+      { name: 'CacheStorage Open Timing', key: 'cache',
+        measurement: results.cache ? (results.cache.error || ('single: ' + (results.cache.single.medMs || 0).toFixed(3) + ' ms, batch: ' + (results.cache.batch.medMs || 0).toFixed(3) + ' ms')) : 'not run' }
+    ];
+
+    var incognitoCount = 0;
+    var normalCount = 0;
+    var total = 0;
+
+    for (var i = 0; i < methods.length; i++) {
+      var m = methods[i];
+      var r = results[m.key];
+      var verdict = r ? r.verdict : 'not run';
+      if (verdict === 'incognito') incognitoCount++;
+      if (verdict === 'normal') normalCount++;
+      if (r) total++;
+
+      var tr = document.createElement('tr');
+      var tdName = document.createElement('td');
+      tdName.textContent = m.name;
+      var tdMeasure = document.createElement('td');
+      tdMeasure.className = 'mono';
+      tdMeasure.textContent = m.measurement;
+      var tdVerdict = document.createElement('td');
+      var cls = verdict === 'not run' ? 'tag tag-error' : 'tag tag-' + verdict;
+      tdVerdict.innerHTML = '<span class="' + cls + '">' + verdict.toUpperCase() + '</span>';
+      tr.appendChild(tdName);
+      tr.appendChild(tdMeasure);
+      tr.appendChild(tdVerdict);
+      summaryBody.appendChild(tr);
+    }
+
+    var overall = $('overallVerdict');
+    if (total === 0) {
+      overall.innerHTML = '<p class="small">No tests have been run yet.</p>';
+    } else if (incognitoCount >= 2) {
+      overall.innerHTML = '<p><span class="tag tag-incognito">LIKELY INCOGNITO</span> ' + incognitoCount + ' of ' + total + ' methods indicate private browsing.</p>';
+    } else if (normalCount >= 2) {
+      overall.innerHTML = '<p><span class="tag tag-normal">LIKELY NORMAL</span> ' + normalCount + ' of ' + total + ' methods indicate normal browsing.</p>';
+    } else {
+      overall.innerHTML = '<p><span class="tag tag-neutral">INCONCLUSIVE</span> Results are mixed or neutral across methods.</p>';
+    }
+  }
+
+  async function runAll() {
+    $('runAllBtn').disabled = true;
+    log('--- Running all tests ---');
+    log('User agent: ' + navigator.userAgent);
+    await handleIDB();
+    await handleOPFS();
+    await handleCache();
+    showSummary();
+    log('--- All tests complete ---');
+    $('runAllBtn').disabled = false;
+  }
+
+  $('runAllBtn').addEventListener('click', runAll);
+  $('idbBtn').addEventListener('click', function () { handleIDB().then(showSummary); });
+  $('opfsBtn').addEventListener('click', function () { handleOPFS().then(showSummary); });
+  $('cacheBtn').addEventListener('click', function () { handleCache().then(showSummary); });
+})();
+</script>
+</body>
+</html>
