@@ -62,7 +62,7 @@
       is in-memory, so these operations complete much faster.
     </p>
     <p class="small">
-      <b>How to use:</b> Click "Run all tests" or run each method individually.
+      <b>How to use:</b> Run each method individually.
       Compare verdicts between a normal window and a private window.
     </p>
     <p class="small">
@@ -72,10 +72,6 @@
       Original detection techniques from
       <a href="https://issues.chromium.org/issues/515090580">crbug.com/515090580</a>.
     </p>
-  </div>
-
-  <div class="card">
-    <button id="runAllBtn">Run all tests</button>
   </div>
 
   <!-- Method 1: IndexedDB Strict/Relaxed Pair Ratio -->
@@ -490,23 +486,6 @@
     }
   }
 
-  function settle(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-
-  async function runAll() {
-    $('runAllBtn').disabled = true;
-    log('--- Running all tests ---');
-    log('User agent: ' + navigator.userAgent);
-    await handleIDB();
-    await settle(200);
-    await handleOPFS();
-    await settle(200);
-    await handleCache();
-    showSummary();
-    log('--- All tests complete ---');
-    $('runAllBtn').disabled = false;
-  }
-
-  $('runAllBtn').addEventListener('click', runAll);
   $('idbBtn').addEventListener('click', function () { handleIDB().then(showSummary); });
   $('opfsBtn').addEventListener('click', function () { handleOPFS().then(showSummary); });
   $('cacheBtn').addEventListener('click', function () { handleCache().then(showSummary); });
