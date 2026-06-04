@@ -490,12 +490,16 @@
     }
   }
 
+  function settle(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
   async function runAll() {
     $('runAllBtn').disabled = true;
     log('--- Running all tests ---');
     log('User agent: ' + navigator.userAgent);
     await handleIDB();
+    await settle(200);
     await handleOPFS();
+    await settle(200);
     await handleCache();
     showSummary();
     log('--- All tests complete ---');
