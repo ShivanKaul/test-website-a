@@ -121,20 +121,21 @@
     <button id="opfsBtn">Run Method 2</button>
   </div>
 
-  <!-- Method 3: CacheStorage openNewSingle / openNewBatch -->
+  <!-- Method 3: CacheStorage Open Timing -->
   <div class="card" id="cacheCard">
     <div class="method-header">
       <h2>Method 3: CacheStorage Open Timing</h2>
       <div class="verdict-slot" id="cacheVerdict"></div>
     </div>
     <p class="small">
-      Opens and immediately deletes CacheStorage entries, measuring the time taken. In normal
-      mode, cache operations use a disk-backed backend (slower). In incognito, the backend is
-      entirely in-memory (faster). Two sub-tests: <code>openNewSingle</code> (one cache at a
-      time) and <code>openNewBatch</code> (3 caches per iteration).
+      Opens and immediately deletes CacheStorage entries in sequential bursts, measuring
+      the per-operation cost. In normal mode, cache operations use a disk-backed backend
+      (~6 ms/op). In incognito, the backend is entirely in-memory (~0.3 ms/op). Two burst
+      sizes: <code>single</code> (6 ops) and <code>batch</code> (18 ops), each sampled
+      3 times. Reports the median ms/op for comparison across browsing modes.
     </p>
     <p class="small detail-row">
-      <b>Thresholds:</b> single median &lt; 3.76 ms = incognito; batch median &lt; 13.74 ms = incognito.
+      <b>Thresholds:</b> ms/op &lt; 1.0 = incognito, ms/op &gt; 2.0 = normal, otherwise neutral.
     </p>
     <div class="detail-row" id="cacheDetail" style="display:none;">
       <table>
@@ -298,44 +299,42 @@
   }
 
   // ---- Method 3: CacheStorage Open Timing ----
+  // Improved approach: sequential burst of open+delete ops, reports median ms/op.
+  // Normal ~6 ms/op (disk-backed), incognito ~0.3 ms/op (in-memory).
 
-  var CACHE_THRESHOLD_SINGLE = 3.759375;
-  var CACHE_THRESHOLD_BATCH = 13.73625;
-  var CACHE_ITER = 6;
-  var CACHE_DELAY = 20;
-  var CACHE_BATCH_SIZE = 3;
+  var CACHE_SAMPLES = 3;
+  var CACHE_SINGLE_OPS = 6;
+  var CACHE_BATCH_OPS = 18;
+  var CACHE_THRESHOLD_LOW = 1.0;   // ms/op below this = incognito
+  var CACHE_THRESHOLD_HIGH = 2.0;  // ms/op above this = normal
 
-  async function runCacheSingle() {
-    if (!('caches' in window)) return { error: 'CacheStorage not supported' };
-    try { await caches.open('__probe_warmup__'); } catch (e) {}
-    var times = [];
-    for (var i = 0; i < CACHE_ITER; i++) {
-      var name = '__probe_single_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  async function runCacheBurst(opCount, prefix) {
+    var results = [];
+    for (var s = 0; s < CACHE_SAMPLES; s++) {
       var t0 = performance.now();
-      try { await caches.open(name); await caches.delete(name); } catch (e) {}
-      times.push(performance.now() - t0);
-      if (CACHE_DELAY) await new Promise(function (r) { setTimeout(r, CACHE_DELAY); });
+      for (var i = 0; i < opCount; i++) {
+        var name = prefix + '_' + i;
+        await caches.open(name);
+        await caches.delete(name);
+      }
+      results.push((performance.now() - t0) / opCount);
     }
-    var med = median(times);
-    return { medMs: med, times: times, threshold: CACHE_THRESHOLD_SINGLE,
-             verdict: med >= CACHE_THRESHOLD_SINGLE ? 'normal' : 'incognito' };
+    return results;
   }
 
-  async function runCacheBatch() {
+  async function runCache() {
     if (!('caches' in window)) return { error: 'CacheStorage not supported' };
-    var times = [];
-    for (var i = 0; i < CACHE_ITER; i++) {
-      var t0 = performance.now();
-      for (var j = 0; j < CACHE_BATCH_SIZE; j++) {
-        var name = '__probe_batch_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + j;
-        try { await caches.open(name); await caches.delete(name); } catch (e) {}
-      }
-      times.push(performance.now() - t0);
-      if (CACHE_DELAY) await new Promise(function (r) { setTimeout(r, CACHE_DELAY); });
-    }
-    var med = median(times);
-    return { medMs: med, times: times, threshold: CACHE_THRESHOLD_BATCH,
-             verdict: med >= CACHE_THRESHOLD_BATCH ? 'normal' : 'incognito' };
+    // warmup
+    try { await caches.open('__warmup__'); await caches.delete('__warmup__'); } catch (e) {}
+
+    var singlePerOp = await runCacheBurst(CACHE_SINGLE_OPS, '__cs_s');
+    var batchPerOp = await runCacheBurst(CACHE_BATCH_OPS, '__cs_b');
+    var singleMed = median(singlePerOp);
+    var batchMed = median(batchPerOp);
+    var avg = (singleMed + batchMed) / 2;
+    var verdict = avg < CACHE_THRESHOLD_LOW ? 'incognito' : avg > CACHE_THRESHOLD_HIGH ? 'normal' : 'neutral';
+    return { singleMsPerOp: singleMed, batchMsPerOp: batchMed,
+             singleSamples: singlePerOp, batchSamples: batchPerOp, verdict: verdict };
   }
 
   // ---- UI handlers ----
@@ -405,25 +404,29 @@
     setVerdict($('cacheVerdict'), 'running');
     log('Running Method 3: CacheStorage Open Timing...');
     try {
-      var single = await runCacheSingle();
-      var batch = await runCacheBatch();
-      // Overall: incognito if either sub-test says incognito
-      var verdict = (single.verdict === 'incognito' || batch.verdict === 'incognito') ? 'incognito' :
-                    (single.error || batch.error) ? 'error' : 'normal';
-      results.cache = { single: single, batch: batch, verdict: verdict };
-      setVerdict($('cacheVerdict'), verdict);
-      updateCardBorder('cacheCard', verdict);
-      var body = $('cacheDetailBody');
-      body.innerHTML = '';
-      addDetailRow(body, 'openNewSingle median', (single.medMs || 0).toFixed(3) + ' ms (threshold: ' + CACHE_THRESHOLD_SINGLE.toFixed(2) + ' ms)');
-      addDetailRow(body, 'openNewSingle verdict', single.verdict || single.error);
-      addDetailRow(body, 'openNewSingle times (ms)', (single.times || []).map(function (x) { return x.toFixed(3); }).join(', '));
-      addDetailRow(body, 'openNewBatch median', (batch.medMs || 0).toFixed(3) + ' ms (threshold: ' + CACHE_THRESHOLD_BATCH.toFixed(2) + ' ms)');
-      addDetailRow(body, 'openNewBatch verdict', batch.verdict || batch.error);
-      addDetailRow(body, 'openNewBatch times (ms)', (batch.times || []).map(function (x) { return x.toFixed(3); }).join(', '));
-      addDetailRow(body, 'Overall verdict', verdict);
-      $('cacheDetail').style.display = 'block';
-      log('Method 3 result: single=' + (single.medMs || 0).toFixed(3) + ' ms (' + (single.verdict || single.error) + '), batch=' + (batch.medMs || 0).toFixed(3) + ' ms (' + (batch.verdict || batch.error) + '), overall=' + verdict);
+      var r = await runCache();
+      if (r.error) {
+        setVerdict($('cacheVerdict'), 'error');
+        var body = $('cacheDetailBody');
+        body.innerHTML = '';
+        addDetailRow(body, 'Error', r.error);
+        $('cacheDetail').style.display = 'block';
+        log('Method 3 error: ' + r.error);
+        results.cache = { error: r.error, verdict: 'error' };
+      } else {
+        results.cache = r;
+        setVerdict($('cacheVerdict'), r.verdict);
+        updateCardBorder('cacheCard', r.verdict);
+        var body = $('cacheDetailBody');
+        body.innerHTML = '';
+        addDetailRow(body, 'Single ms/op (median)', r.singleMsPerOp.toFixed(3) + ' ms/op');
+        addDetailRow(body, 'Single samples (ms/op)', r.singleSamples.map(function (x) { return x.toFixed(3); }).join(', '));
+        addDetailRow(body, 'Batch ms/op (median)', r.batchMsPerOp.toFixed(3) + ' ms/op');
+        addDetailRow(body, 'Batch samples (ms/op)', r.batchSamples.map(function (x) { return x.toFixed(3); }).join(', '));
+        addDetailRow(body, 'Verdict', r.verdict);
+        $('cacheDetail').style.display = 'block';
+        log('Method 3 result: single=' + r.singleMsPerOp.toFixed(3) + ' ms/op, batch=' + r.batchMsPerOp.toFixed(3) + ' ms/op, verdict=' + r.verdict);
+      }
     } catch (e) {
       setVerdict($('cacheVerdict'), 'error');
       log('Method 3 error: ' + e);
@@ -444,7 +447,7 @@
       { name: 'OPFS SyncAccessHandle Flush', key: 'opfs',
         measurement: results.opfs ? (results.opfs.error || ('flush: ' + results.opfs.medFlushMs.toFixed(3) + ' ms')) : 'not run' },
       { name: 'CacheStorage Open Timing', key: 'cache',
-        measurement: results.cache ? (results.cache.error || ('single: ' + (results.cache.single.medMs || 0).toFixed(3) + ' ms, batch: ' + (results.cache.batch.medMs || 0).toFixed(3) + ' ms')) : 'not run' }
+        measurement: results.cache ? (results.cache.error || ('single: ' + results.cache.singleMsPerOp.toFixed(3) + ' ms/op, batch: ' + results.cache.batchMsPerOp.toFixed(3) + ' ms/op')) : 'not run' }
     ];
 
     var incognitoCount = 0;
