@@ -130,12 +130,11 @@
     <p class="small">
       Opens and immediately deletes CacheStorage entries in sequential bursts, measuring
       the per-operation cost. In normal mode, cache operations use a disk-backed backend
-      (~6 ms/op). In incognito, the backend is entirely in-memory (~0.3 ms/op). Two burst
-      sizes: <code>single</code> (6 ops) and <code>batch</code> (18 ops), each sampled
-      3 times. Reports the median ms/op for comparison across browsing modes.
+      (slower). In incognito, the backend is entirely in-memory (faster). Two burst sizes:
+      <code>single</code> (6 ops) and <code>batch</code> (18 ops), each sampled 3 times.
     </p>
     <p class="small detail-row">
-      <b>Thresholds:</b> ms/op &lt; 1.0 = incognito, ms/op &gt; 2.0 = normal, otherwise neutral.
+      <b>Thresholds:</b> ms/op &lt; 0.35 = incognito, ms/op &gt; 0.45 = normal, otherwise neutral.
     </p>
     <div class="detail-row" id="cacheDetail" style="display:none;">
       <table>
@@ -305,8 +304,8 @@
   var CACHE_SAMPLES = 3;
   var CACHE_SINGLE_OPS = 6;
   var CACHE_BATCH_OPS = 18;
-  var CACHE_THRESHOLD_LOW = 1.0;   // ms/op below this = incognito
-  var CACHE_THRESHOLD_HIGH = 2.0;  // ms/op above this = normal
+  var CACHE_THRESHOLD_LOW = 0.35;  // ms/op below this = incognito
+  var CACHE_THRESHOLD_HIGH = 0.45; // ms/op above this = normal
 
   async function runCacheBurst(opCount, prefix) {
     var results = [];
