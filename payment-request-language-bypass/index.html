@@ -59,33 +59,18 @@
     </div>
 
     <details>
-        <summary>How it works / why this is a bypass</summary>
+        <summary>What this test does</summary>
         <pre>const request = new PaymentRequest(
   [{ supportedMethods: 'https://this-site/.../pmh/&lt;token&gt;' }],
   { total: { label: 'total', amount: { value: '0', currency: 'USD' } } }
 );
 request.show();   // browser HEAD-fetches the manifest URL</pre>
         <p>
-            Brave applies <code>Accept-Language</code> reductions in
-            <code>BraveProxyingURLLoaderFactory</code> (the proxy installed for
-            renderer/frame network factories via
-            <code>WillCreateURLLoaderFactory</code>). A normal <code>fetch()</code>
-            from this page goes through that proxy and is reduced.
-        </p>
-        <p>
-            But <code>PaymentManifestDownloader</code> fetches the manifest using the
-            <em>browser-process</em> factory
-            (<code>GetURLLoaderFactoryForBrowserProcess()</code>). The renderer factory
-            is only used when the feature <code>kPaymentRequestUseRendererUrlLoader</code>
-            is enabled, and it is <strong>disabled by default</strong>. The browser-process
-            factory is not wrapped by Brave's proxy, so the reduction never runs and the
-            full <code>Accept-Language</code> list leaks. Even the first-party site you are
-            visiting recovers your full language list this way, which the protection is
-            supposed to prevent.
-        </p>
-        <p>
-            <strong>Verdict:</strong> if the Payment-manifest row below shows more
-            languages than the normal <code>fetch()</code> row, the protection was bypassed.
+            The test compares the <code>Accept-Language</code> a normal
+            <code>fetch()</code> sends against the one the browser sends when it
+            fetches the payment-method manifest, both captured server-side. If the
+            Payment-manifest row shows more languages than the normal
+            <code>fetch()</code> row, the protection did not apply to that request.
         </p>
     </details>
 
