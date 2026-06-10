@@ -33,18 +33,12 @@
     <div class="card">
         <strong>Setup (to test the protection):</strong>
         <ol>
-            <li>Open <code>brave://settings/shields</code> (or <code>privacy</code>) and enable
-                <em>"Prevent sites from fingerprinting me based on my language preferences"</em>
-                (this is on by default with Shields fingerprinting protection).</li>
+            <li>Open <code>brave://settings/privacy</code> and make sure
+                <em>"Prevent sites from fingerprinting me based on my language preferences"</em> is enabled.</li>
             <li>Open <code>brave://settings/languages</code> and add several non-English
                 preferred languages (e.g. French, German, Japanese), so your full list is distinctive.</li>
             <li>Reload this page and click <strong>Run Test</strong>.</li>
         </ol>
-        <p style="margin-bottom:0;">
-            This page is on <code>test-website-a.pages.dev</code>. The payment-method endpoints
-            live on the unrelated third-party origin <code>test-website-b.pages.dev</code>, which
-            is where your full language list leaks to.
-        </p>
     </div>
 
     <button id="run">Run Test</button>
@@ -72,7 +66,7 @@
 );
 request.show();   // browser HEAD-fetches the manifest URL</pre>
         <p>
-            Brave reduces <code>Accept-Language</code> to a single language inside
+            Brave applies <code>Accept-Language</code> reductions in
             <code>BraveProxyingURLLoaderFactory</code> (the proxy installed for
             renderer/frame network factories via
             <code>WillCreateURLLoaderFactory</code>). A normal <code>fetch()</code>
@@ -85,9 +79,9 @@ request.show();   // browser HEAD-fetches the manifest URL</pre>
             is only used when the feature <code>kPaymentRequestUseRendererUrlLoader</code>
             is enabled, and it is <strong>disabled by default</strong>. The browser-process
             factory is not wrapped by Brave's proxy, so the reduction never runs and the
-            full <code>Accept-Language</code> list leaks &mdash; here, to an unrelated
-            third-party origin (<code>test-website-b.pages.dev</code>) that the merchant
-            page simply names as its payment method.
+            full <code>Accept-Language</code> list leaks. Even the first-party site you are
+            visiting recovers your full language list this way, which the protection is
+            supposed to prevent.
         </p>
         <p>
             <strong>Verdict:</strong> if the Payment-manifest row below shows more
@@ -96,11 +90,7 @@ request.show();   // browser HEAD-fetches the manifest URL</pre>
     </details>
 
     <script>
-        // The third-party origin that hosts the logging endpoints (Site B).
-        // Override with ?tp=https://localhost:8788 for local testing.
-        const TP_ORIGIN = new URLSearchParams(location.search).get('tp')
-            || 'https://test-website-b.pages.dev';
-        const base = TP_ORIGIN + '/payment-request-language-bypass';
+        const base = '/payment-request-language-bypass';
 
         document.getElementById('navlangs').innerHTML =
             '<code>' + JSON.stringify(navigator.languages) + '</code>';
@@ -166,7 +156,7 @@ request.show();   // browser HEAD-fetches the manifest URL</pre>
 
             // 2) Trigger the Payment Request manifest fetch.
             setStatus('Triggering PaymentRequest manifest fetch...');
-            const methodUrl = base + '/pmh/' + token;
+            const methodUrl = location.origin + base + '/pmh/' + token;
             try {
                 const request = new PaymentRequest(
                     [{ supportedMethods: methodUrl }],
