@@ -4,16 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Storage Access API Test Harness Site A</title>
+  <link rel="stylesheet" href="/styles.css" />
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; line-height: 1.45; margin: 0; padding: 18px; }
     h1,h2 { margin: 0 0 10px 0; }
     p { margin: 8px 0; }
     ol { margin: 8px 0 0 22px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
-    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
-    .warn { border-color: rgba(200,140,0,0.8); }
-    .ok { border-color: rgba(0,160,0,0.7); }
+    .card.warn { border-color: rgba(200,140,0,0.8); }
+    .card.ok { border-color: rgba(0,160,0,0.7); }
     button,a.btn {
       display: inline-block;
       padding: 8px 12px;
@@ -27,8 +24,7 @@
     }
     button:hover,a.btn:hover { background: rgba(127,127,127,0.18); }
     iframe { width: 100%; height: 640px; border: 1px solid rgba(127,127,127,0.35); border-radius: 14px; background: rgba(127,127,127,0.04); }
-    pre { padding: 12px; border-radius: 10px; overflow: auto; background: rgba(127,127,127,0.14); margin: 0; }
-    .small { opacity: 0.85; }
+    pre { border-radius: 10px; background: var(--code-bg); margin: 0; }
   </style>
 </head>
 <body>

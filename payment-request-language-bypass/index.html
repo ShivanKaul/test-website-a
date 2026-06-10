@@ -4,27 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Payment Request API Language Fingerprint Bypass</title>
+    <link rel="stylesheet" href="/styles.css" />
     <style>
-        :root { color-scheme: light dark; }
-        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; margin: 0 auto; padding: 18px; max-width: 800px; }
-        h1 { font-size: 1.4em; }
-        .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 14px 16px; margin: 14px 0; background: rgba(127,127,127,0.06); }
-        code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,0.14); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
-        table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-        th, td { border: 1px solid rgba(127,127,127,0.28); padding: 8px 12px; text-align: left; vertical-align: top; font-size: 0.92em; }
-        th { background: rgba(127,127,127,0.1); }
-        td code { font-size: 0.9em; }
-        button { font-size: 1em; padding: 9px 20px; cursor: pointer; border-radius: 6px; border: 1px solid rgba(127,127,127,0.3); background: rgba(127,127,127,0.08); }
-        button:hover { background: rgba(127,127,127,0.16); }
-        button:disabled { opacity: 0.5; cursor: default; }
-        #status { margin-top: 10px; opacity: 0.85; min-height: 1.2em; }
         #verdict { font-size: 1.15em; font-weight: bold; margin-top: 14px; }
-        .leak { color: #c0392b; }
-        .safe { color: #1e8449; }
         ol li { margin: 4px 0; }
-        details { margin-top: 1.4em; opacity: 0.9; }
-        details summary { cursor: pointer; font-weight: bold; }
-        details pre { background: rgba(127,127,127,0.08); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.84em; }
     </style>
 </head>
 <body>
@@ -42,7 +25,7 @@
     </div>
 
     <button id="run">Run Test</button>
-    <p id="status"></p>
+    <p id="status" class="status"></p>
 
     <table id="results" style="display:none;">
         <thead>

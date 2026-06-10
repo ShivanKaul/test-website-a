@@ -1,4 +1,5 @@
 {
   "title": "Incognito Detection via Timing Side-Channels",
-  "description": "Tests whether timing differences in IndexedDB durability modes, OPFS SyncAccessHandle flush, and CacheStorage operations can reveal private browsing mode. Covers three detection methods reported in brave-browser#56009."
+  "description": "Tests whether timing differences in IndexedDB durability modes, OPFS SyncAccessHandle flush, and CacheStorage operations can reveal private browsing mode. Covers three detection methods reported in brave-browser#56009.",
+  "added": "2026-06-03"
 }

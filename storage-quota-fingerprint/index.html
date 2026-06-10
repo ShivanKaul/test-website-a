@@ -4,34 +4,22 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Storage Quota Fingerprinting Test</title>
+  <link rel="stylesheet" href="/styles.css" />
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; line-height: 1.45; margin: 0; padding: 18px; max-width: 800px; }
     h1,h2 { margin: 0 0 10px 0; }
     p { margin: 8px 0; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .card { border: 1px solid rgba(127,127,127,0.28); border-radius: 14px; padding: 12px; margin: 12px 0; background: rgba(127,127,127,0.06); }
-    .pass { border-color: rgba(0,160,0,0.7); }
-    .fail { border-color: rgba(200,0,0,0.7); }
-    .warn { border-color: rgba(200,140,0,0.8); }
-    .na { border-color: rgba(127,127,127,0.4); }
     button {
       display: inline-block;
       padding: 8px 12px;
       border-radius: 10px;
-      border: 1px solid rgba(127,127,127,0.35);
-      background: rgba(127,127,127,0.12);
-      color: inherit;
-      cursor: pointer;
       margin-right: 8px;
     }
-    button:hover { background: rgba(127,127,127,0.18); }
-    pre { padding: 12px; border-radius: 10px; overflow: auto; background: rgba(127,127,127,0.14); margin: 0; white-space: pre-wrap; word-break: break-all; }
-    .small { opacity: 0.85; font-size: 0.9em; }
-    table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(127,127,127,0.2); }
-    th { opacity: 0.7; font-size: 0.85em; text-transform: uppercase; }
+    pre { border-radius: 10px; background: var(--code-bg); margin: 0; white-space: pre-wrap; }
+    table { margin: 8px 0; }
+    th, td { padding: 6px 10px; border: none; border-bottom: 1px solid rgba(127,127,127,0.2); }
+    th { background: none; opacity: 0.7; font-size: 0.85em; text-transform: uppercase; }
     td.mono { font-size: 0.9em; }
+    .small { opacity: 0.85; }
     .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; }
     .tag-pass { background: rgba(0,160,0,0.15); color: rgba(0,140,0,1); }
     .tag-fail { background: rgba(200,0,0,0.15); color: rgba(180,0,0,1); }

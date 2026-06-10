@@ -1,4 +1,5 @@
 {
   "title": "Payment Request API Language Fingerprint Bypass",
-  "description": "Tests whether the Payment Request API leaks the full Accept-Language header even when 'Prevent sites from fingerprinting me based on my language preferences' is enabled. Brave reduces Accept-Language in BraveProxyingURLLoaderFactory, but PaymentManifestDownloader fetches manifests through the browser-process URLLoaderFactory (kPaymentRequestUseRendererUrlLoader is disabled by default), which is not proxied, so the full language list leaks."
+  "description": "Tests whether the Payment Request API leaks the full Accept-Language header even when 'Prevent sites from fingerprinting me based on my language preferences' is enabled. Brave reduces Accept-Language in BraveProxyingURLLoaderFactory, but PaymentManifestDownloader fetches manifests through the browser-process URLLoaderFactory (kPaymentRequestUseRendererUrlLoader is disabled by default), which is not proxied, so the full language list leaks.",
+  "added": "2026-06-10"
 }

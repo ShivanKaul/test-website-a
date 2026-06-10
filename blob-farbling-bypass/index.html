@@ -3,47 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <title>Blob URL Farbling Bypass</title>
+    <link rel="stylesheet" href="/styles.css" />
     <style>
-        :root { color-scheme: light dark; }
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            line-height: 1.45;
-            margin: 0;
-            padding: 18px;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        table { border-collapse: collapse; margin-top: 1em; width: 100%; }
+        table { margin-top: 1em; }
         th, td {
-            border: 1px solid rgba(127,127,127,0.28);
             padding: 6px 12px;
-            text-align: left;
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 0.9em;
         }
         th { background: rgba(127,127,127,0.08); }
-        .match { color: green; }
-        .mismatch { color: red; font-weight: bold; }
-        #status { margin-top: 1em; opacity: 0.85; }
         #verdict { font-size: 1.1em; margin-top: 1em; }
-        button {
-            font-size: 1em;
-            padding: 8px 18px;
-            cursor: pointer;
-            border-radius: 6px;
-            border: 1px solid rgba(127,127,127,0.28);
-            background: rgba(127,127,127,0.06);
-        }
-        button:hover { background: rgba(127,127,127,0.12); }
-        details { margin-top: 1.5em; opacity: 0.85; }
-        details summary { cursor: pointer; font-weight: bold; }
-        details pre {
-            background: rgba(127,127,127,0.06);
-            padding: 12px;
-            border-radius: 6px;
-            overflow-x: auto;
-            font-size: 0.85em;
-        }
     </style>
     <script>
         // Blob page HTML: reads real values, writes to localStorage, closes itself.
@@ -182,7 +151,7 @@
         <li>This page reads the blob's values from <code>localStorage</code> and compares.</li>
     </ol>
     <button onclick="runTest()">Run Test</button>
-    <p id="status"></p>
+    <p id="status" class="status"></p>
     <table id="resultsTable" style="display:none;">
         <thead>
             <tr><th>Property</th><th>Main Page (farbled)</th><th>Blob Page (unfarbled)</th><th>Match?</th></tr>
