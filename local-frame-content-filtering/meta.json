@@ -1,0 +1,5 @@
+{
+  "title": "Local Frame Content-Filtering Bypass",
+  "description": "Tests whether content-filtering rules apply inside about:blank iframes. These frames inherit the parent's security origin, but vulnerable browsers check window.location.href instead, allowing first-party filter rules to be bypassed (brave-browser#40649).",
+  "added": "2026-06-30"
+}

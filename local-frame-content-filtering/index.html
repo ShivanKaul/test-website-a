@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Frame Content-Filtering Bypass</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Local Frame Content-Filtering Bypass</h1>
+    <p class="muted small">
+      Tests whether content-filtering rules apply inside <code>about:blank</code> iframes
+      &mdash; <a href="https://github.com/brave/brave-browser/issues/40649">brave-browser#40649</a>
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>Setup: add this filter rule</h2>
+    <p>
+      Before running the test, add the following custom filter rule to your browser
+      (Brave: <em>Settings &rarr; Brave Shields &amp; Privacy &rarr; Content Filtering &rarr; Custom Filters</em>):
+    </p>
+    <pre><code>||test-website-a.pages.dev/local-frame-content-filtering/test.png$image</code></pre>
+    <p class="small muted">
+      This rule should block the probe image on this page.
+      After adding it, reload this page and click <strong>Run Test</strong>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      The test loads a small probe image (<code>test.png</code>) in two contexts:
+    </p>
+    <ol>
+      <li>Directly in this page (main frame).</li>
+      <li>Inside a dynamically created <code>about:blank</code> iframe.</li>
+    </ol>
+    <p>
+      An <code>about:blank</code> frame has no URL of its own; its code runs with
+      the security origin of the parent frame. A correct implementation therefore
+      applies the same content-filtering rules to both contexts.
+    </p>
+    <p>
+      On vulnerable implementations (e.g. Brave iOS), the browser resolves the
+      frame&rsquo;s context from <code>window.location.href</code>
+      (<code>about:blank</code>) rather than from the inherited parent origin,
+      so first-party filter rules are silently skipped inside the frame.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run Test</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Context</th>
+          <th>Probe image</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Main frame</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>No filter rule active</td>
+          <td>Loads</td>
+          <td>Loads</td>
+          <td class="warn">Not meaningful &mdash; add the rule first</td>
+        </tr>
+        <tr>
+          <td>Protected browser (rule active)</td>
+          <td>Blocked</td>
+          <td>Blocked</td>
+          <td class="ok">Pass</td>
+        </tr>
+        <tr>
+          <td>Vulnerable browser (rule active)</td>
+          <td>Blocked</td>
+          <td>Loads</td>
+          <td class="bad">Fail &mdash; about:blank bypasses filtering</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const IMG_PATH = '/local-frame-content-filtering/test.png';
+
+    function probeImage(doc) {
+      return new Promise(function (resolve) {
+        var img = doc.createElement('img');
+        var timer = setTimeout(function () { resolve('timeout'); }, 5000);
+        img.onload = function () { clearTimeout(timer); resolve('loaded'); };
+        img.onerror = function () { clearTimeout(timer); resolve('blocked'); };
+        img.src = IMG_PATH + '?t=' + Date.now();
+        doc.body.appendChild(img);
+      });
+    }
+
+    function addRow(label, result) {
+      var tbody = document.getElementById('resultsBody');
+      var tr = document.createElement('tr');
+      var cls = result === 'blocked' ? 'ok' : result === 'loaded' ? 'bad' : 'warn';
+      var text = result === 'blocked' ? 'Blocked \u2713' :
+                 result === 'loaded'  ? 'Loaded \u2014 not blocked \u2717' :
+                                        'Timeout';
+      tr.innerHTML =
+        '<td>' + label + '</td>' +
+        '<td><code>' + IMG_PATH + '</code></td>' +
+        '<td class="' + cls + '">' + text + '</td>';
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('runBtn').addEventListener('click', function () {
+      var btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      document.getElementById('status').textContent = 'Running\u2026';
+      document.getElementById('resultCard').style.display = '';
+      document.getElementById('resultsBody').innerHTML = '';
+
+      // Step 1: probe in main frame
+      probeImage(document).then(function (mainResult) {
+        addRow('Main frame', mainResult);
+
+        // Step 2: probe inside an about:blank iframe
+        var iframe = document.createElement('iframe');
+        iframe.src = 'about:blank';
+        iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+        document.body.appendChild(iframe);
+
+        // Give the frame time to initialise before writing into it
+        setTimeout(function () {
+          probeImage(iframe.contentDocument).then(function (frameResult) {
+            addRow('<code>about:blank</code> iframe', frameResult);
+            document.body.removeChild(iframe);
+
+            var v = document.getElementById('verdict');
+            if (mainResult === 'loaded' && frameResult === 'loaded') {
+              v.className = 'verdict warn';
+              v.textContent = 'Filter rule not active \u2014 add the rule above, reload the page, and run again.';
+            } else if (mainResult === 'blocked' && frameResult === 'blocked') {
+              v.className = 'verdict ok';
+              v.textContent = 'Pass: content filtering applies correctly inside about:blank frames.';
+            } else if (mainResult === 'blocked' && frameResult === 'loaded') {
+              v.className = 'verdict bad';
+              v.textContent = 'Fail: the about:blank frame bypassed content filtering (brave-browser#40649).';
+            } else {
+              v.className = 'verdict warn';
+              v.textContent = 'Unexpected result (main: ' + mainResult + ', frame: ' + frameResult + ').';
+            }
+
+            document.getElementById('status').textContent = 'Done.';
+            btn.disabled = false;
+          });
+        }, 150);
+      });
+    });
+  </script>
+</body>
+</html>
