@@ -205,10 +205,10 @@
       }
     }
 
-    async function runScan(fetchFn) {
+    async function runScan(fetchFn, targets) {
       var results = {};
-      for (var i = 0; i < TARGETS.length; i += 1) {
-        var target = TARGETS[i];
+      for (var i = 0; i < targets.length; i += 1) {
+        var target = targets[i];
         results[target.label] = await probeTarget(fetchFn, target.url);
       }
       return results;
@@ -249,7 +249,7 @@
       document.getElementById('resultCard').style.display = '';
 
       try {
-        topResults = await runScan(window.fetch.bind(window));
+        topResults = await runScan(window.fetch.bind(window), TARGETS);
       } finally {
         renderResults();
         updateVerdict();
@@ -266,7 +266,7 @@
 
       try {
         var frame = await ensureFrameWindow();
-        frameResults = await frame.runLocalNetworkScan(frame.fetch.bind(frame));
+        frameResults = await frame.runLocalNetworkScan(frame.fetch.bind(frame), TARGETS);
       } finally {
         renderResults();
         updateVerdict();
