@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Geolocation and Camera in about:blank Frame</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Geolocation and Camera in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Compares permission-gated APIs in the top-level frame and an <code>about:blank</code> iframe.
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      This page runs two permission-gated checks in two contexts:
+    </p>
+    <ol>
+      <li>Top-level frame</li>
+      <li>Dynamically created <code>about:blank</code> iframe</li>
+    </ol>
+    <p>
+      APIs tested:
+      <code>navigator.geolocation.getCurrentPosition</code> and
+      <code>navigator.mediaDevices.getUserMedia({ video: true })</code>.
+    </p>
+    <p>
+      A consistent browser should handle each API the same way in both contexts.
+      If the frame outcome differs from top-level for the same API, that indicates
+      inconsistent permission handling.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run Permission Comparison</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>API</th>
+          <th>Top-level frame</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Comparison</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="small muted">
+      Allowed/denied outcomes may trigger permission prompts depending on browser settings.
+    </p>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Top-level frame</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Consistent handling</td>
+          <td>Allowed/Denied/Unavailable</td>
+          <td>Same outcome as top-level</td>
+          <td class="ok">Pass</td>
+        </tr>
+        <tr>
+          <td>Inconsistent handling</td>
+          <td>One outcome</td>
+          <td>Different outcome for same API</td>
+          <td class="bad">Fail &mdash; frame permission handling differs</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    var APIS = [
+      { key: 'geolocation', label: 'Geolocation' },
+      { key: 'camera', label: 'Camera' }
+    ];
+
+    var frameWindow = null;
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatResult(result) {
+      var label = {
+        granted: 'Allowed',
+        denied: 'Denied',
+        timeout: 'Timed out',
+        unavailable: 'Unavailable',
+        error: 'Error'
+      }[result.state] || result.state;
+
+      var cls = result.state === 'denied' ? 'ok' :
+        result.state === 'error' ? 'bad' :
+        'warn';
+
+      var details = result.detail ? '<div class="small muted">' + escapeHtml(result.detail) + '</div>' : '';
+      return { cls: cls, html: label + details };
+    }
+
+    function renderResults(topResults, frameResults) {
+      var tbody = document.getElementById('resultsBody');
+      tbody.innerHTML = APIS.map(function (entry) {
+        var top = topResults[entry.key];
+        var frame = frameResults[entry.key];
+        var topView = formatResult(top);
+        var frameView = formatResult(frame);
+        var sameState = top.state === frame.state;
+        var cmpClass = sameState ? 'ok' : 'bad';
+        var cmpText = sameState ? 'Match' : 'Mismatch';
+
+        return '' +
+          '<tr>' +
+            '<td>' + entry.label + '</td>' +
+            '<td class="' + topView.cls + '">' + topView.html + '</td>' +
+            '<td class="' + frameView.cls + '">' + frameView.html + '</td>' +
+            '<td class="' + cmpClass + '">' + cmpText + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function updateVerdict(topResults, frameResults) {
+      var verdict = document.getElementById('verdict');
+      var mismatches = APIS.filter(function (entry) {
+        return topResults[entry.key].state !== frameResults[entry.key].state;
+      });
+
+      if (mismatches.length) {
+        verdict.className = 'verdict bad';
+        verdict.textContent = 'Fail: ' + mismatches.map(function (entry) {
+          return entry.label;
+        }).join(', ') + ' returned different outcomes in top-level vs about:blank frame.';
+      } else {
+        verdict.className = 'verdict ok';
+        verdict.textContent = 'Pass: both APIs produced matching outcomes in top-level and about:blank contexts.';
+      }
+    }
+
+    async function runPermissionProbe(apiKey) {
+      function withTimeout(promise, ms) {
+        var timer;
+        var timeoutPromise = new Promise(function (_, reject) {
+          timer = setTimeout(function () {
+            var err = new Error('Timed out');
+            err.name = 'TimeoutError';
+            reject(err);
+          }, ms);
+        });
+        return Promise.race([promise, timeoutPromise]).finally(function () {
+          clearTimeout(timer);
+        });
+      }
+
+      if (apiKey === 'geolocation') {
+        if (!navigator.geolocation || typeof navigator.geolocation.getCurrentPosition !== 'function') {
+          return { state: 'unavailable', detail: 'Geolocation API is not available in this context.' };
+        }
+
+        try {
+          await new Promise(function (resolve, reject) {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: false,
+              timeout: 8000,
+              maximumAge: 0
+            });
+          });
+          return { state: 'granted', detail: 'Position returned.' };
+        } catch (error) {
+          if (error && error.code === 1) {
+            return { state: 'denied', detail: 'Permission denied.' };
+          }
+          if (error && error.code === 3) {
+            return { state: 'timeout', detail: 'Request timed out.' };
+          }
+          return { state: 'error', detail: error && error.message ? error.message : String(error) };
+        }
+      }
+
+      if (apiKey === 'camera') {
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+          return { state: 'unavailable', detail: 'MediaDevices/getUserMedia is not available in this context.' };
+        }
+
+        try {
+          var stream = await withTimeout(
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false }),
+            12000
+          );
+          stream.getTracks().forEach(function (track) {
+            track.stop();
+          });
+          return { state: 'granted', detail: 'Video stream opened.' };
+        } catch (error) {
+          if (error && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) {
+            return { state: 'denied', detail: error.message || 'Permission denied.' };
+          }
+          if (error && error.name === 'NotFoundError') {
+            return { state: 'unavailable', detail: 'No camera device found.' };
+          }
+          if (error && error.name === 'TimeoutError') {
+            return { state: 'timeout', detail: 'No result before timeout.' };
+          }
+          return { state: 'error', detail: error && error.message ? error.message : String(error) };
+        }
+      }
+
+      return { state: 'error', detail: 'Unknown API key: ' + apiKey };
+    }
+
+    function ensureFrameWindow() {
+      if (frameWindow && frameWindow.runPermissionProbe) {
+        return Promise.resolve(frameWindow);
+      }
+
+      return new Promise(function (resolve) {
+        var iframe = document.createElement('iframe');
+        iframe.src = 'about:blank';
+        iframe.allow = 'geolocation; camera';
+        iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+        iframe.onload = function () {
+          var doc = iframe.contentDocument;
+          doc.open();
+          doc.write(
+            '<!doctype html><html><head><meta charset="utf-8"></head><body>' +
+            '<script>' +
+              'window.runPermissionProbe = ' + runPermissionProbe.toString() + ';' +
+            '<\/script>' +
+            '</body></html>'
+          );
+          doc.close();
+          frameWindow = iframe.contentWindow;
+          resolve(frameWindow);
+        };
+        document.body.appendChild(iframe);
+      });
+    }
+
+    async function runComparison() {
+      var btn = document.getElementById('runBtn');
+      var status = document.getElementById('status');
+      var resultCard = document.getElementById('resultCard');
+      btn.disabled = true;
+      resultCard.style.display = '';
+
+      try {
+        status.textContent = 'Running top-level permission probes…';
+        var topResults = {};
+        for (var i = 0; i < APIS.length; i += 1) {
+          var api = APIS[i];
+          topResults[api.key] = await runPermissionProbe(api.key);
+        }
+
+        status.textContent = 'Running about:blank frame permission probes…';
+        var frame = await ensureFrameWindow();
+        var frameResults = {};
+        for (var j = 0; j < APIS.length; j += 1) {
+          var frameApi = APIS[j];
+          frameResults[frameApi.key] = await frame.runPermissionProbe(frameApi.key);
+        }
+
+        renderResults(topResults, frameResults);
+        updateVerdict(topResults, frameResults);
+        status.textContent = 'Done.';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runComparison);
+  </script>
+</body>
+</html>
