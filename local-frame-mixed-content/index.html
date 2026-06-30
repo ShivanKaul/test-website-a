@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mixed Content in about:blank Frame</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Mixed Content in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Tests whether mixed content blocking applies inside <code>about:blank</code> iframes
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      The test loads an insecure HTTP image
+      (<code>http://http.badssl.com/icons/icon-red.png</code>) in two contexts
+      on this HTTPS page:
+    </p>
+    <ol>
+      <li>Directly in the main frame.</li>
+      <li>Inside a dynamically created <code>about:blank</code> iframe.</li>
+    </ol>
+    <p>
+      An <code>about:blank</code> frame inherits its security origin from the parent, so
+      mixed content rules should apply identically in both contexts.
+    </p>
+    <p>
+      A vulnerable browser may resolve the frame&rsquo;s context from
+      <code>window.location.href</code> (<code>about:blank</code>) rather than the inherited
+      HTTPS origin, causing mixed content checks to be skipped inside the frame.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run Test</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Context</th>
+          <th>Image URL</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Main frame</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Protected browser</td>
+          <td>Blocked</td>
+          <td>Blocked</td>
+          <td class="ok">Pass</td>
+        </tr>
+        <tr>
+          <td>Vulnerable browser</td>
+          <td>Blocked</td>
+          <td>Loads</td>
+          <td class="bad">Fail &mdash; <code>about:blank</code> bypasses mixed content blocking</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    var IMG_URL = 'http://http.badssl.com/icons/icon-red.png';
+
+    function probeImage(doc) {
+      return new Promise(function (resolve) {
+        var img = doc.createElement('img');
+        var timer = setTimeout(function () { resolve('timeout'); }, 5000);
+        img.onload  = function () { clearTimeout(timer); resolve('loaded'); };
+        img.onerror = function () { clearTimeout(timer); resolve('blocked'); };
+        img.src = IMG_URL + '?t=' + Date.now();
+        doc.body.appendChild(img);
+      });
+    }
+
+    function addRow(label, result) {
+      var tbody = document.getElementById('resultsBody');
+      var tr = document.createElement('tr');
+      var cls  = result === 'blocked' ? 'ok' : result === 'loaded' ? 'bad' : 'warn';
+      var text = result === 'blocked' ? 'Blocked \u2713' :
+                 result === 'loaded'  ? 'Loaded \u2014 not blocked \u2717' :
+                                        'Timeout';
+      tr.innerHTML =
+        '<td>' + label + '</td>' +
+        '<td><code>' + IMG_URL + '</code></td>' +
+        '<td class="' + cls + '">' + text + '</td>';
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('runBtn').addEventListener('click', function () {
+      var btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      document.getElementById('status').textContent = 'Running\u2026';
+      document.getElementById('resultCard').style.display = '';
+      document.getElementById('resultsBody').innerHTML = '';
+
+      // Step 1: probe in main frame
+      probeImage(document).then(function (mainResult) {
+        addRow('Main frame', mainResult);
+
+        // Step 2: probe inside an about:blank iframe
+        var iframe = document.createElement('iframe');
+        iframe.src = 'about:blank';
+        iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+        document.body.appendChild(iframe);
+
+        setTimeout(function () {
+          probeImage(iframe.contentDocument).then(function (frameResult) {
+            addRow('<code>about:blank</code> iframe', frameResult);
+
+            var v = document.getElementById('verdict');
+            if (mainResult === 'blocked' && frameResult === 'blocked') {
+              v.className = 'verdict ok';
+              v.textContent = 'Pass: mixed content blocking applies correctly inside about:blank frames.';
+            } else if (mainResult === 'blocked' && frameResult === 'loaded') {
+              v.className = 'verdict bad';
+              v.textContent = 'Fail: the about:blank frame bypassed mixed content blocking.';
+            } else {
+              v.className = 'verdict warn';
+              v.textContent = 'Unexpected result (main: ' + mainResult + ', frame: ' + frameResult + ').';
+            }
+
+            document.getElementById('status').textContent = 'Done.';
+            btn.disabled = false;
+          });
+        }, 150);
+      });
+    });
+  </script>
+</body>
+</html>

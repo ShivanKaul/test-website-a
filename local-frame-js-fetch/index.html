@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JS Fetch in about:blank Frame</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>JS Fetch in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Tests whether disabling JavaScript at the top level also disables it inside
+      an <code>about:blank</code> iframe
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      The parent page uses JavaScript to create an <code>about:blank</code> iframe and write
+      a script into it. That script:
+    </p>
+    <ol>
+      <li>Fetches <code>/local-frame-js-fetch/data.json</code> from the same origin.</li>
+      <li>Sums the numbers in the response and multiplies by a constant:
+          (3+7+11+19+23)&times;4 = <strong>252</strong>.</li>
+      <li>Writes the computed result to the frame&rsquo;s document.</li>
+    </ol>
+    <p>
+      Because an <code>about:blank</code> frame inherits its security origin from the parent,
+      a browser&rsquo;s script-blocking policy should apply equally to both contexts.
+    </p>
+    <p>
+      <strong>To test:</strong> click <em>Run Test</em> with JavaScript enabled to see the frame
+      output, then disable JavaScript for this page, reload, and observe what happens.
+      If the frame still displays <em>&ldquo;Result: 252&rdquo;</em> with JS disabled,
+      the browser&rsquo;s JS policy is not correctly propagated to <code>about:blank</code> frames.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run Test</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Frame output</h2>
+    <iframe id="testFrame"
+            title="JS fetch test frame"
+            style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:6px;background:var(--panel);display:block;box-sizing:border-box;"></iframe>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <noscript>
+      <p class="warn">
+        JavaScript is disabled on the top-level page &mdash;
+        the <code>about:blank</code> frame could not be created.
+        This is the expected protected behaviour.
+      </p>
+    </noscript>
+
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Frame output</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>JS enabled</td>
+          <td>Result: 252</td>
+          <td class="ok">Expected &mdash; JS runs in frame</td>
+        </tr>
+        <tr>
+          <td>JS disabled (protected)</td>
+          <td>Frame not created / empty</td>
+          <td class="ok">Pass &mdash; JS policy propagates to <code>about:blank</code></td>
+        </tr>
+        <tr>
+          <td>JS disabled (vulnerable)</td>
+          <td>Result: 252</td>
+          <td class="bad">Fail &mdash; frame JS runs despite top-level JS being off</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    document.getElementById('runBtn').addEventListener('click', function () {
+      var btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      document.getElementById('status').textContent = 'Running\u2026';
+      document.getElementById('resultCard').style.display = '';
+
+      var frame = document.getElementById('testFrame');
+      var doc = frame.contentDocument || frame.contentWindow.document;
+
+      // Write a mini-document with its own fetch+compute script into about:blank.
+      // The absolute URL avoids base-URL ambiguity inside about:blank.
+      var dataURL = location.origin + '/local-frame-js-fetch/data.json';
+
+      doc.open();
+      doc.write(
+        '<!doctype html><html><head><meta charset="utf-8"></head>' +
+        '<body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em">' +
+        '<p id="s">Fetching\u2026</p>' +
+        '<script>' +
+          'fetch("' + dataURL + '")' +
+          '.then(function(r){return r.json();})' +
+          '.then(function(d){' +
+            'var n=d.numbers.reduce(function(a,b){return a+b;},0);' +
+            'document.getElementById("s").textContent="Result: "+(n*d.multiplier);' +
+          '})' +
+          '.catch(function(e){document.getElementById("s").textContent="Fetch error: "+e;});' +
+        '<\/script>' +
+        '</body></html>'
+      );
+      doc.close();
+
+      // Poll the frame until it writes a final result (or time out).
+      var deadline = Date.now() + 6000;
+      var poll = setInterval(function () {
+        var text = (doc.getElementById('s') || {}).textContent || '';
+        var done = text.startsWith('Result:') || text.startsWith('Fetch error:');
+        var timedOut = Date.now() > deadline;
+
+        if (done || timedOut) {
+          clearInterval(poll);
+          var v = document.getElementById('verdict');
+          if (text.startsWith('Result: 252')) {
+            v.className = 'verdict ok';
+            v.textContent = 'Frame computed the correct result (252).';
+          } else if (text.startsWith('Result:')) {
+            v.className = 'verdict warn';
+            v.textContent = 'Frame returned an unexpected result: ' + text;
+          } else if (text.startsWith('Fetch error:')) {
+            v.className = 'verdict warn';
+            v.textContent = 'Fetch failed inside the frame: ' + text;
+          } else {
+            v.className = 'verdict warn';
+            v.textContent = 'Timed out waiting for frame result.';
+          }
+          document.getElementById('status').textContent = 'Done.';
+          btn.disabled = false;
+        }
+      }, 200);
+    });
+  </script>
+</body>
+</html>

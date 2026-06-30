@@ -1,0 +1,5 @@
+{
+  "title": "Mixed Content in about:blank Frame",
+  "description": "Tests whether mixed content blocking (HTTP image on an HTTPS page) applies correctly inside about:blank iframes. Vulnerable browsers may skip the check when the frame URL is about:blank instead of the inherited HTTPS origin.",
+  "added": "2026-06-30"
+}
