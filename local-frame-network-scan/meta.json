@@ -1,0 +1,5 @@
+{
+  "title": "Local Network Scan in about:blank Frame",
+  "description": "Compares local-network fetch probes from the top-level page and an about:blank iframe using separate buttons to detect whether the frame gets broader local-network reachability than its parent.",
+  "added": "2026-06-30"
+}

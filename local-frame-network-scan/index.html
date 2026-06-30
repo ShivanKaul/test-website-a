@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Network Scan in about:blank Frame</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Local Network Scan in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Compares local-network fetch probes from the top-level page and from an
+      <code>about:blank</code> iframe
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      This page tries a small set of HTTP requests to likely local-network targets,
+      including loopback and common router addresses. Use the two buttons below to
+      run the same probe list from two contexts:
+    </p>
+    <ol>
+      <li>Directly in the top-level page.</li>
+      <li>Inside a dynamically created <code>about:blank</code> iframe.</li>
+    </ol>
+    <p>
+      A protected browser should apply the same local-network restrictions to both
+      contexts. A vulnerable browser may reject the top-level scan while still
+      letting the <code>about:blank</code> frame reach local targets.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Setup</h2>
+    <p>
+      For a clear signal, make sure at least one local HTTP service is reachable,
+      such as <code>python3 -m http.server 8000</code> on your machine or a router
+      admin page on <code>192.168.0.1</code> / <code>192.168.1.1</code>.
+    </p>
+    <p class="small muted">
+      The test is most useful when the top-level scan rejects those targets but the
+      <code>about:blank</code> frame resolves one of them.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="scanTopBtn" type="button">Scan from top-level frame</button>
+    <button id="scanFrameBtn" type="button">Scan from <code>about:blank</code> frame</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Target</th>
+          <th>Top-level frame</th>
+          <th><code>about:blank</code> frame</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="small muted">
+      &ldquo;Resolved&rdquo; means the request promise completed; &ldquo;Rejected&rdquo; means the browser or
+      network rejected it; &ldquo;Timed out&rdquo; means no result was observed before the deadline.
+    </p>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Top-level frame</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Protected browser</td>
+          <td>Rejects or matches frame behaviour</td>
+          <td>Rejects or matches top-level behaviour</td>
+          <td class="ok">Pass</td>
+        </tr>
+        <tr>
+          <td>Vulnerable browser</td>
+          <td>Rejects a target</td>
+          <td>Resolves that same target</td>
+          <td class="bad">Fail &mdash; <code>about:blank</code> reaches local network more broadly</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    var TARGETS = [
+      { label: '127.0.0.1:8000', url: 'http://127.0.0.1:8000/' },
+      { label: '127.0.0.1:3000', url: 'http://127.0.0.1:3000/' },
+      { label: '192.168.0.1', url: 'http://192.168.0.1/' },
+      { label: '192.168.1.1', url: 'http://192.168.1.1/' }
+    ];
+
+    var topResults = {};
+    var frameResults = {};
+    var frameWindow = null;
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function classify(result) {
+      if (!result) return { cls: '', text:' ' };
+      if (result.state === 'resolved') return { cls: 'warn', text: 'Resolved' };
+      if (result.state === 'rejected') return { cls: 'ok', text: 'Rejected' };
+      return { cls: 'warn', text: 'Timed out' };
+    }
+
+    function renderResults() {
+      var tbody = document.getElementById('resultsBody');
+      tbody.innerHTML = TARGETS.map(function (target) {
+        var top = classify(topResults[target.label]);
+        var frame = classify(frameResults[target.label]);
+        return '' +
+          '<tr>' +
+            '<td><code>' + escapeHtml(target.url) + '</code></td>' +
+            '<td class="' + top.cls + '">' + top.text + '</td>' +
+            '<td class="' + frame.cls + '">' + frame.text + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function updateVerdict() {
+      var verdict = document.getElementById('verdict');
+      var haveTop = Object.keys(topResults).length > 0;
+      var haveFrame = Object.keys(frameResults).length > 0;
+
+      if (!haveTop && !haveFrame) {
+        verdict.className = 'verdict';
+        verdict.textContent = '';
+        return;
+      }
+
+      if (!haveTop || !haveFrame) {
+        verdict.className = 'verdict warn';
+        verdict.textContent = 'Run both buttons to compare the top-level and about:blank results.';
+        return;
+      }
+
+      var mismatches = TARGETS.filter(function (target) {
+        var top = topResults[target.label];
+        var frame = frameResults[target.label];
+        return top && frame && top.state === 'rejected' && frame.state === 'resolved';
+      });
+
+      var anyResolved = TARGETS.some(function (target) {
+        var top = topResults[target.label];
+        var frame = frameResults[target.label];
+        return (top && top.state === 'resolved') || (frame && frame.state === 'resolved');
+      });
+
+      if (mismatches.length) {
+        verdict.className = 'verdict bad';
+        verdict.textContent = 'Fail: the about:blank frame resolved ' + mismatches.length + ' target(s) that the top-level frame rejected.';
+      } else if (anyResolved) {
+        verdict.className = 'verdict ok';
+        verdict.textContent = 'No about:blank-only bypass detected: both contexts showed the same reachability for the probed targets.';
+      } else {
+        verdict.className = 'verdict warn';
+        verdict.textContent = 'No target resolved in either context. Start a local HTTP service or use a reachable router/admin page, then run both scans again.';
+      }
+    }
+
+    async function probeTarget(fetchFn, url) {
+      var controller = new AbortController();
+      var timer = setTimeout(function () {
+        controller.abort();
+      }, 3500);
+
+      try {
+        await fetchFn(url + (url.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now(), {
+          mode: 'no-cors',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        return { state: 'resolved' };
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          return { state: 'timeout' };
+        }
+        return { state: 'rejected' };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function runScan(fetchFn, targets) {
+      var results = {};
+      for (var i = 0; i < targets.length; i += 1) {
+        var target = targets[i];
+        results[target.label] = await probeTarget(fetchFn, target.url);
+      }
+      return results;
+    }
+
+    function ensureFrameWindow() {
+      if (frameWindow && frameWindow.runLocalNetworkScan) {
+        return Promise.resolve(frameWindow);
+      }
+
+      return new Promise(function (resolve) {
+        var iframe = document.createElement('iframe');
+        iframe.src = 'about:blank';
+        iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+        iframe.onload = function () {
+          var doc = iframe.contentDocument;
+          doc.open();
+          doc.write(
+            '<!doctype html><html><head><meta charset="utf-8"></head><body>' +
+            '<script>' +
+              'window.runLocalNetworkScan = ' + runScan.toString() + ';' +
+              'window.probeTarget = ' + probeTarget.toString() + ';' +
+            '<\/script>' +
+            '</body></html>'
+          );
+          doc.close();
+          frameWindow = iframe.contentWindow;
+          resolve(frameWindow);
+        };
+        document.body.appendChild(iframe);
+      });
+    }
+
+    async function runTopLevelScan() {
+      var btn = document.getElementById('scanTopBtn');
+      btn.disabled = true;
+      document.getElementById('status').textContent = 'Running top-level scan\u2026';
+      document.getElementById('resultCard').style.display = '';
+
+      try {
+        topResults = await runScan(window.fetch.bind(window), TARGETS);
+      } finally {
+        renderResults();
+        updateVerdict();
+        document.getElementById('status').textContent = 'Top-level scan finished.';
+        btn.disabled = false;
+      }
+    }
+
+    async function runFrameScan() {
+      var btn = document.getElementById('scanFrameBtn');
+      btn.disabled = true;
+      document.getElementById('status').textContent = 'Running about:blank frame scan\u2026';
+      document.getElementById('resultCard').style.display = '';
+
+      try {
+        var frame = await ensureFrameWindow();
+        frameResults = await frame.runLocalNetworkScan(frame.fetch.bind(frame), TARGETS);
+      } finally {
+        renderResults();
+        updateVerdict();
+        document.getElementById('status').textContent = 'about:blank frame scan finished.';
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('scanTopBtn').addEventListener('click', runTopLevelScan);
+    document.getElementById('scanFrameBtn').addEventListener('click', runFrameScan);
+  </script>
+</body>
+</html>
