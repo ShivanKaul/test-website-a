@@ -1,0 +1,5 @@
+{
+  "title": "Geolocation and Camera in about:blank Frame",
+  "description": "Compares geolocation and camera permission-gated API outcomes between the top-level page and an about:blank iframe to detect inconsistent permission handling.",
+  "added": "2026-06-30"
+}
