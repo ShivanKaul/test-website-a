@@ -5,6 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Local Frame Content-Filtering Bypass</title>
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .preview-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      margin-top: 12px;
+    }
+    .preview-panel h3 {
+      margin: 0 0 10px;
+      font-size: 1em;
+    }
+    .preview-image,
+    .preview-frame {
+      display: block;
+      width: 100%;
+      min-height: 180px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      box-sizing: border-box;
+    }
+    .preview-image {
+      object-fit: contain;
+      padding: 8px;
+    }
+    .preview-note {
+      margin: 8px 0 0;
+      min-height: 1.2em;
+    }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -70,6 +100,22 @@
     <p class="verdict" id="verdict"></p>
   </div>
 
+  <div class="card" id="previewCard" style="display:none;">
+    <h2>Visual preview</h2>
+    <div class="preview-grid">
+      <section class="preview-panel">
+        <h3>Main frame image</h3>
+        <div id="mainPreviewHost"></div>
+        <p class="preview-note small muted" id="mainPreviewNote"></p>
+      </section>
+      <section class="preview-panel">
+        <h3><code>about:blank</code> iframe</h3>
+        <div id="framePreviewHost"></div>
+        <p class="preview-note small muted" id="framePreviewNote"></p>
+      </section>
+    </div>
+  </div>
+
   <div class="card">
     <h2>Expected results</h2>
     <table>
@@ -107,14 +153,21 @@
   <script>
     const IMG_PATH = '/local-frame-content-filtering/test.png';
 
-    function probeImage(doc) {
+    function probeImage(doc, host) {
       return new Promise(function (resolve) {
         var img = doc.createElement('img');
+        img.className = 'preview-image';
+        img.style.display = 'block';
+        img.style.width = '100%';
+        img.style.minHeight = '180px';
+        img.style.objectFit = 'contain';
+        img.style.boxSizing = 'border-box';
+        img.style.padding = '8px';
         var timer = setTimeout(function () { resolve('timeout'); }, 5000);
         img.onload = function () { clearTimeout(timer); resolve('loaded'); };
         img.onerror = function () { clearTimeout(timer); resolve('blocked'); };
+        host.appendChild(img);
         img.src = IMG_PATH + '?t=' + Date.now();
-        doc.body.appendChild(img);
       });
     }
 
@@ -132,27 +185,52 @@
       tbody.appendChild(tr);
     }
 
+    function setPreviewNote(id, result) {
+      var note = document.getElementById(id);
+      note.textContent = result === 'loaded' ? 'Loaded image shown above.' :
+                         result === 'blocked' ? 'Image was blocked.' :
+                                                'Image load timed out.';
+    }
+
     document.getElementById('runBtn').addEventListener('click', function () {
       var btn = document.getElementById('runBtn');
+      var mainPreviewHost = document.getElementById('mainPreviewHost');
+      var framePreviewHost = document.getElementById('framePreviewHost');
       btn.disabled = true;
       document.getElementById('status').textContent = 'Running\u2026';
       document.getElementById('resultCard').style.display = '';
+      document.getElementById('previewCard').style.display = '';
       document.getElementById('resultsBody').innerHTML = '';
+      document.getElementById('mainPreviewNote').textContent = '';
+      document.getElementById('framePreviewNote').textContent = '';
+      mainPreviewHost.innerHTML = '';
+      framePreviewHost.innerHTML = '';
 
       // Step 1: probe in main frame
-      probeImage(document).then(function (mainResult) {
+      probeImage(document, mainPreviewHost).then(function (mainResult) {
         addRow('Main frame', mainResult);
+        setPreviewNote('mainPreviewNote', mainResult);
 
         // Step 2: probe inside an about:blank iframe
         var iframe = document.createElement('iframe');
         iframe.src = 'about:blank';
-        iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
-        document.body.appendChild(iframe);
+        iframe.className = 'preview-frame';
+        iframe.title = 'about:blank image preview';
+        framePreviewHost.appendChild(iframe);
 
         // Give the frame time to initialise before writing into it
         setTimeout(function () {
-          probeImage(iframe.contentDocument).then(function (frameResult) {
+          var frameDoc = iframe.contentDocument;
+          frameDoc.body.style.margin = '0';
+          frameDoc.body.style.minHeight = '180px';
+          frameDoc.body.style.display = 'flex';
+          frameDoc.body.style.alignItems = 'center';
+          frameDoc.body.style.justifyContent = 'center';
+          frameDoc.body.style.background = 'rgba(127, 127, 127, 0.06)';
+
+          probeImage(frameDoc, frameDoc.body).then(function (frameResult) {
             addRow('<code>about:blank</code> iframe', frameResult);
+            setPreviewNote('framePreviewNote', frameResult);
 
             var v = document.getElementById('verdict');
             if (mainResult === 'loaded' && frameResult === 'loaded') {
