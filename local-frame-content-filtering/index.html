@@ -157,6 +157,12 @@
       return new Promise(function (resolve) {
         var img = doc.createElement('img');
         img.className = 'preview-image';
+        img.style.display = 'block';
+        img.style.width = '100%';
+        img.style.minHeight = '180px';
+        img.style.objectFit = 'contain';
+        img.style.boxSizing = 'border-box';
+        img.style.padding = '8px';
         var timer = setTimeout(function () { resolve('timeout'); }, 5000);
         img.onload = function () { clearTimeout(timer); resolve('loaded'); };
         img.onerror = function () { clearTimeout(timer); resolve('blocked'); };
