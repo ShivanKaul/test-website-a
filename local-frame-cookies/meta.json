@@ -1,0 +1,5 @@
+{
+  "title": "Cookies in about:blank Frame",
+  "description": "Tests whether blocking cookies for the top-level page also blocks cookie writes inside a same-origin about:blank iframe. A vulnerable browser may let the frame keep setting cookies after the top-level page cannot.",
+  "added": "2026-06-30"
+}

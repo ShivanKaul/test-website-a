@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cookies in about:blank Frame</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    iframe {
+      width: 100%;
+      min-height: 110px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      display: block;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <h1>Cookies in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Tests whether disabling cookies for the top-level page also blocks cookie writes
+      inside a same-origin <code>about:blank</code> iframe.
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      This page tries to set and immediately read back a cookie in two contexts:
+    </p>
+    <ol>
+      <li>The top-level page.</li>
+      <li>A dynamically created <code>about:blank</code> iframe with inherited origin.</li>
+    </ol>
+    <p>
+      Because the frame inherits the parent origin, a browser that blocks cookies for this site
+      should block both attempts equally.
+    </p>
+    <p>
+      <strong>To test cookie blocking:</strong> run the test once with cookies enabled,
+      then disable cookies for this site or the top-level page, reload, and run it again.
+      If the top-level write fails but the <code>about:blank</code> frame still stores its cookie,
+      the cookie policy is not propagating correctly into the frame.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Environment</h2>
+    <p>Origin: <code id="origin"></code></p>
+    <p><code>navigator.cookieEnabled</code>: <code id="cookieEnabled"></code></p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run Test</button>
+    <button id="clearBtn" type="button">Clear Test Cookies</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Context</th>
+          <th>Attempted value</th>
+          <th>Observed value</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <h2>Frame output</h2>
+    <iframe id="testFrame" title="Cookie test frame"></iframe>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Top-level page</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Cookies allowed</td>
+          <td>Sets cookie</td>
+          <td>Sets cookie</td>
+          <td class="ok">Expected</td>
+        </tr>
+        <tr>
+          <td>Cookies disabled (protected)</td>
+          <td>Fails</td>
+          <td>Fails</td>
+          <td class="ok">Pass &mdash; cookie policy propagates to <code>about:blank</code></td>
+        </tr>
+        <tr>
+          <td>Cookies disabled (vulnerable)</td>
+          <td>Fails</td>
+          <td>Sets cookie</td>
+          <td class="bad">Fail &mdash; <code>about:blank</code> bypasses cookie blocking</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    var TOP_COOKIE = 'lf_top_cookie';
+    var FRAME_COOKIE = 'lf_frame_cookie';
+    var COOKIE_ATTRS = 'Path=/; SameSite=Lax';
+
+    document.getElementById('origin').textContent = location.origin;
+    document.getElementById('cookieEnabled').textContent = String(navigator.cookieEnabled);
+
+    function clearCookie(name, doc) {
+      doc.cookie = name + '=; Max-Age=0; ' + COOKIE_ATTRS;
+    }
+
+    function readCookie(name, doc) {
+      var target = name + '=';
+      var parts = doc.cookie ? doc.cookie.split('; ') : [];
+      for (var i = 0; i < parts.length; i += 1) {
+        if (parts[i].indexOf(target) === 0) {
+          return parts[i].slice(target.length);
+        }
+      }
+      return '';
+    }
+
+    function runCookieAttempt(doc, name, value) {
+      clearCookie(name, doc);
+      doc.cookie = name + '=' + encodeURIComponent(value) + '; Max-Age=600; ' + COOKIE_ATTRS;
+      return decodeURIComponent(readCookie(name, doc));
+    }
+
+    function addRow(label, attempted, observed) {
+      var tbody = document.getElementById('resultsBody');
+      var tr = document.createElement('tr');
+      var matched = observed === attempted;
+      tr.innerHTML =
+        '<td>' + label + '</td>' +
+        '<td><code>' + escapeHtml(attempted) + '</code></td>' +
+        '<td><code>' + escapeHtml(observed || '(empty)') + '</code></td>' +
+        '<td class="' + (matched ? 'ok' : 'bad') + '">' + (matched ? 'Stored \u2713' : 'Not stored \u2717') + '</td>';
+      tbody.appendChild(tr);
+      return matched;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function clearAll() {
+      clearCookie(TOP_COOKIE, document);
+      var frame = document.getElementById('testFrame');
+      var doc = frame.contentDocument || frame.contentWindow.document;
+      clearCookie(FRAME_COOKIE, doc);
+    }
+
+    document.getElementById('clearBtn').addEventListener('click', function () {
+      clearAll();
+      document.getElementById('status').textContent = 'Cleared test cookies.';
+    });
+
+    document.getElementById('runBtn').addEventListener('click', function () {
+      var btn = document.getElementById('runBtn');
+      var status = document.getElementById('status');
+      var frame = document.getElementById('testFrame');
+      var topValue = 'top-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8);
+      var frameValue = 'frame-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8);
+
+      btn.disabled = true;
+      status.textContent = 'Running\u2026';
+      document.getElementById('resultCard').style.display = '';
+      document.getElementById('resultsBody').innerHTML = '';
+      document.getElementById('verdict').textContent = '';
+
+      var topObserved = runCookieAttempt(document, TOP_COOKIE, topValue);
+      var topStored = addRow('Top-level page', topValue, topObserved);
+
+      frame.src = 'about:blank';
+      frame.addEventListener('load', function onLoad() {
+        frame.removeEventListener('load', onLoad);
+
+        var doc = frame.contentDocument || frame.contentWindow.document;
+        doc.open();
+        doc.write(
+          '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em">' +
+          '<p id="s">Running frame cookie test\u2026</p>' +
+          '<script>' +
+            'document.cookie="' + FRAME_COOKIE + '=' + encodeURIComponent(frameValue) + '; Max-Age=600; ' + COOKIE_ATTRS + '";' +
+            'var parts=document.cookie?document.cookie.split("; "):[];' +
+            'var value="";' +
+            'for(var i=0;i<parts.length;i+=1){if(parts[i].indexOf("' + FRAME_COOKIE + '=")===0){value=parts[i].slice(' + (FRAME_COOKIE.length + 1) + ');break;}}' +
+            'document.getElementById("s").textContent=value;' +
+          '<\/script>' +
+          '</body></html>'
+        );
+        doc.close();
+
+        setTimeout(function () {
+          var frameObservedRaw = ((doc.getElementById('s') || {}).textContent || '').trim();
+          var frameObserved = frameObservedRaw ? decodeURIComponent(frameObservedRaw) : '';
+          var frameStored = addRow('<code>about:blank</code> frame', frameValue, frameObserved);
+          var verdict = document.getElementById('verdict');
+
+          if (topStored && frameStored) {
+            verdict.className = 'verdict ok';
+            verdict.textContent = 'Both contexts stored cookies. This is expected when cookies are allowed.';
+          } else if (!topStored && !frameStored) {
+            verdict.className = 'verdict ok';
+            verdict.textContent = 'Both contexts failed to store cookies. If cookies are disabled for this site, that is the expected protected behavior.';
+          } else if (!topStored && frameStored) {
+            verdict.className = 'verdict bad';
+            verdict.textContent = 'Fail: the about:blank frame stored a cookie even though the top-level page could not.';
+          } else {
+            verdict.className = 'verdict warn';
+            verdict.textContent = 'Unexpected result: the top-level page stored a cookie but the about:blank frame did not.';
+          }
+
+          status.textContent = 'Done.';
+          btn.disabled = false;
+        }, 150);
+      }, { once: true });
+    });
+  </script>
+</body>
+</html>
