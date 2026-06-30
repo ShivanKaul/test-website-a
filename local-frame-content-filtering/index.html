@@ -153,7 +153,6 @@
         setTimeout(function () {
           probeImage(iframe.contentDocument).then(function (frameResult) {
             addRow('<code>about:blank</code> iframe', frameResult);
-            document.body.removeChild(iframe);
 
             var v = document.getElementById('verdict');
             if (mainResult === 'loaded' && frameResult === 'loaded') {
