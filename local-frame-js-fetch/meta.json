@@ -1,5 +1,5 @@
 {
-  "title": "JS Fetch in about:blank Frame",
-  "description": "Tests whether disabling JavaScript at the top level also disables it inside an about:blank iframe. The frame uses JS to fetch a JSON file, compute a value, and write the result. With JS disabled, the frame should remain empty.",
+  "title": "JS Fetch in Local Frame",
+  "description": "Tests whether disabling JavaScript at the top level also disables it inside a local iframe document. The frame uses JS to fetch a JSON file, compute a value, and write the result. With JS disabled, it should not compute the result.",
   "added": "2026-06-30"
 }
