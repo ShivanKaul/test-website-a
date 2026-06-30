@@ -107,6 +107,51 @@
             document.getElementById('verdict').className = hasMismatch ? 'mismatch' : 'match';
         }
 
+        function showBlobPage() {
+            // Open the same blob page but without auto-closing, for manual inspection.
+            let inspectHtml = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Blob Page (Inspect)</title>
+<style>
+body { font-family: system-ui, sans-serif; padding: 2em; }
+table { border-collapse: collapse; margin-top: 1em; }
+th, td { padding: 6px 12px; border: 1px solid #ccc; font-family: ui-monospace, monospace; font-size: 0.9em; }
+th { background: #f0f0f0; }
+</style>
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+    var props = {
+        'screen.width': window.screen.width,
+        'screen.height': window.screen.height,
+        'screen.availWidth': window.screen.availWidth,
+        'screen.availHeight': window.screen.availHeight,
+        'outerWidth': window.outerWidth,
+        'outerHeight': window.outerHeight,
+        'screenX': window.screenX,
+        'screenY': window.screenY,
+        'hardwareConcurrency': navigator.hardwareConcurrency,
+        'deviceMemory': navigator.deviceMemory || 'N/A',
+        'languages': JSON.stringify(navigator.languages),
+        'userAgent': navigator.userAgent,
+        'origin': location.origin
+    };
+    var tbody = document.getElementById('vals');
+    for (var key in props) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + key + '</td><td>' + props[key] + '</td>';
+        tbody.appendChild(tr);
+    }
+});
+<\/script>
+</head><body>
+<h2>Blob Page &mdash; Values as seen from blob: origin</h2>
+<p>This page is loaded via a <code>blob:</code> URL. The values below are what the browser exposes in this context.</p>
+<table><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody id="vals"></tbody></table>
+</body></html>`;
+            let blob = new Blob([inspectHtml], { type: 'text/html' });
+            let blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank');
+        }
+
         function runTest() {
             clearBlobStorage();
             let mainVals = readMainPageValues();
@@ -151,6 +196,7 @@
         <li>This page reads the blob's values from <code>localStorage</code> and compares.</li>
     </ol>
     <button onclick="runTest()">Run Test</button>
+    <button onclick="showBlobPage()">Show Blob Page</button>
     <p id="status" class="status"></p>
     <table id="resultsTable" style="display:none;">
         <thead>
