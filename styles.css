@@ -140,5 +140,15 @@ input, select, textarea {
 .mismatch, .leak { font-weight: bold; }
 .warn { color: var(--warn); }
 
+/* Home / back-to-index link */
+.home-link {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 0.9em;
+  text-decoration: none;
+  opacity: 0.7;
+}
+.home-link:hover { opacity: 1; }
+
 details { margin-top: 1.4em; opacity: 0.9; }
 details summary { cursor: pointer; font-weight: bold; }
