@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secure Content in about:blank Frame</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Secure Content in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Tests whether a secure HTTPS image loads correctly inside <code>about:blank</code> iframes
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      The test loads a secure HTTPS image
+      (<code>https://test-website-a.pages.dev/local-frame-secure-content/icon-red.png</code>) in two contexts
+      on this HTTPS page:
+    </p>
+    <ol>
+      <li>Directly in the main frame.</li>
+      <li>Inside a dynamically created <code>about:blank</code> iframe.</li>
+    </ol>
+    <p>
+      An <code>about:blank</code> frame inherits its security origin from the parent, so
+      a secure image should load successfully in both contexts.
+    </p>
+    <p>
+      This is the secure counterpart to the mixed content test &mdash; since the image
+      is loaded over HTTPS, no mixed content blocking should occur.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run Test</button>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Context</th>
+          <th>Image URL</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="verdict" id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Main frame</th>
+          <th><code>about:blank</code> frame</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Any browser</td>
+          <td>Loaded</td>
+          <td>Loaded</td>
+          <td class="ok">Pass</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    var IMG_URL = 'https://test-website-a.pages.dev/local-frame-secure-content/icon-red.png';
+
+    function probeImage(doc) {
+      return new Promise(function (resolve) {
+        var img = doc.createElement('img');
+        var timer = setTimeout(function () { resolve('timeout'); }, 5000);
+        img.onload  = function () { clearTimeout(timer); resolve('loaded'); };
+        img.onerror = function () { clearTimeout(timer); resolve('blocked'); };
+        img.src = IMG_URL + '?t=' + Date.now();
+        doc.body.appendChild(img);
+      });
+    }
+
+    function addRow(label, result) {
+      var tbody = document.getElementById('resultsBody');
+      var tr = document.createElement('tr');
+      var cls  = result === 'loaded' ? 'ok' : result === 'blocked' ? 'bad' : 'warn';
+      var text = result === 'loaded'  ? 'Loaded \u2713' :
+                 result === 'blocked' ? 'Blocked \u2014 unexpectedly blocked \u2717' :
+                                        'Timeout';
+      tr.innerHTML =
+        '<td>' + label + '</td>' +
+        '<td><code>' + IMG_URL + '</code></td>' +
+        '<td class="' + cls + '">' + text + '</td>';
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('runBtn').addEventListener('click', function () {
+      var btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      document.getElementById('status').textContent = 'Running\u2026';
+      document.getElementById('resultCard').style.display = '';
+      document.getElementById('resultsBody').innerHTML = '';
+
+      // Step 1: probe in main frame
+      probeImage(document).then(function (mainResult) {
+        addRow('Main frame', mainResult);
+
+        // Step 2: probe inside an about:blank iframe
+        var iframe = document.createElement('iframe');
+        iframe.src = 'about:blank';
+        iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+        document.body.appendChild(iframe);
+
+        setTimeout(function () {
+          probeImage(iframe.contentDocument).then(function (frameResult) {
+            addRow('<code>about:blank</code> iframe', frameResult);
+
+            var v = document.getElementById('verdict');
+            if (mainResult === 'loaded' && frameResult === 'loaded') {
+              v.className = 'verdict ok';
+              v.textContent = 'Pass: secure image loaded successfully in both contexts.';
+            } else {
+              v.className = 'verdict bad';
+              v.textContent = 'Fail: secure image was unexpectedly blocked (main: ' + mainResult + ', frame: ' + frameResult + ').';
+            }
+
+            document.getElementById('status').textContent = 'Done.';
+            btn.disabled = false;
+          });
+        }, 150);
+      });
+    });
+  </script>
+</body>
+</html>

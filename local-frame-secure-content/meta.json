@@ -1,0 +1,5 @@
+{
+  "title": "Secure Content in about:blank Frame",
+  "description": "Tests whether a secure HTTPS image loads correctly inside about:blank iframes. This is the secure counterpart to the mixed content test — since the image is loaded over HTTPS, no mixed content blocking should occur.",
+  "added": "2026-07-01"
+}
