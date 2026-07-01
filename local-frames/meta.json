@@ -1,0 +1,5 @@
+{
+  "title": "Local Frames Tests",
+  "description": "Tests for security and privacy behavior inside about:blank and other local iframes — content filtering, cookies, JS fetch, mixed content, network scan, permissions, and secure content.",
+  "added": "2026-07-01"
+}
