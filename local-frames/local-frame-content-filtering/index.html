@@ -48,7 +48,7 @@
       Before running the test, add the following custom filter rule to your browser
       (Brave: <em>Settings &rarr; Brave Shields &amp; Privacy &rarr; Content Filtering &rarr; Custom Filters</em>):
     </p>
-    <pre><code>||test-website-a.pages.dev/local-frame-content-filtering/test.png$image</code></pre>
+    <pre><code>||test-website-a.pages.dev/local-frames/local-frame-content-filtering/test.png$image</code></pre>
     <p class="small muted">
       This rule should block the probe image on this page.
       After adding it, reload this page and click <strong>Run Test</strong>.
@@ -148,7 +148,7 @@
   </div>
 
   <script>
-    const IMG_PATH = '/local-frame-content-filtering/test.png';
+    const IMG_PATH = '/local-frames/local-frame-content-filtering/test.png';
 
     function probeImage(doc, host) {
       return new Promise(function (resolve) {

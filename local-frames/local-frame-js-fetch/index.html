@@ -19,7 +19,7 @@
       That script:
     </p>
     <ol>
-      <li>Fetches <code>/local-frame-js-fetch/data.json</code> from the same origin.</li>
+      <li>Fetches <code>/local-frames/local-frame-js-fetch/data.json</code> from the same origin.</li>
       <li>Sums the numbers in the response and multiplies by a constant:
           (3+7+11+19+23)&times;4 = <strong>252</strong>.</li>
       <li>Writes the computed result to the frame&rsquo;s document.</li>
@@ -44,7 +44,7 @@
     <h2>Frame output</h2>
     <iframe id="testFrame"
             title="JS fetch test frame"
-            srcdoc='<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em"><p id="s">Fetching…</p><script>fetch("/local-frame-js-fetch/data.json").then(function(r){return r.json();}).then(function(d){var n=d.numbers.reduce(function(a,b){return a+b;},0);document.getElementById("s").textContent="Result: "+(n*d.multiplier);}).catch(function(e){document.getElementById("s").textContent="Fetch error: "+e;});</script></body></html>'
+            srcdoc='<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em"><p id="s">Fetching…</p><script>fetch("/local-frames/local-frame-js-fetch/data.json").then(function(r){return r.json();}).then(function(d){var n=d.numbers.reduce(function(a,b){return a+b;},0);document.getElementById("s").textContent="Result: "+(n*d.multiplier);}).catch(function(e){document.getElementById("s").textContent="Fetch error: "+e;});</script></body></html>'
             style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:6px;background:var(--panel);display:block;box-sizing:border-box;"></iframe>
   </div>
 
