@@ -6,9 +6,9 @@
 </head>
 <body>
 <header class="site-header">
-    <h1>JS Execution in <code>about:blank</code> Frame</h1>
+    <h1>JS Execution in Local Frame</h1>
     <p class="muted small">
-      Definitively checks whether an <code>about:blank</code> iframe can run
+      Definitively checks whether a local (<code>srcdoc</code>) iframe can run
       JavaScript, and whether that tracks the top-level page&rsquo;s JS policy
     </p>
   </header>
@@ -16,8 +16,8 @@
   <div class="card">
     <h2>What this tests</h2>
     <p>
-      When you press the button, this page creates an <code>about:blank</code> iframe
-      and injects a document into it. That document contains:
+      The frame below is a local iframe whose document is embedded inline via
+      <code>srcdoc</code>. That document contains:
     </p>
     <ol>
       <li>A line that reads <strong>&ldquo;JavaScript is DISABLED in this frame&rdquo;</strong> by default.</li>
@@ -25,41 +25,42 @@
           <strong>&ldquo;JavaScript is ENABLED in this frame&rdquo;</strong>.</li>
     </ol>
     <p>
-      Whatever the frame ends up showing is the definitive answer: the wording only
-      changes if the frame&rsquo;s own script actually executed. No network request and no
-      arithmetic proxy is involved.
+      The detector is part of the frame itself, so it runs on load with no help from
+      the top-level page. Whatever the frame shows is the definitive answer: the
+      wording only changes if the frame&rsquo;s own script actually executed. No network
+      request and no arithmetic proxy is involved.
     </p>
     <p>
       Because this iframe document is local to the embedding page, a browser&rsquo;s
       script-blocking policy should apply equally to both contexts.
     </p>
     <p>
-      <strong>To test:</strong> with JavaScript enabled, press the button and confirm
-      the frame reports <em>ENABLED</em>. Then disable JavaScript for this page, reload,
-      and press the button again. If the frame still reports <em>ENABLED</em> with JS
-      disabled, the browser&rsquo;s JS policy is not correctly propagated to local iframe
-      documents.
+      <strong>To test:</strong> load this page with JavaScript enabled and confirm the
+      frame reports <em>ENABLED</em>. Then disable JavaScript for this page and reload.
+      If the frame still reports <em>ENABLED</em> with JS disabled, the browser&rsquo;s JS
+      policy is not correctly propagated to local iframe documents.
     </p>
-  </div>
-
-  <div class="card">
-    <button id="runBtn" type="button">Check JS in <code>about:blank</code> frame</button>
-    <p class="status" id="status">Press the button to inject the detector into the frame.</p>
-    <noscript>
-      <p class="warn">
-        JavaScript is disabled on the top-level page.
-        If protection is working, the button will do nothing and the frame should
-        stay empty (the detector is injected by the top-level script, which is also blocked).
-      </p>
-    </noscript>
   </div>
 
   <div class="card" id="resultCard">
     <h2>Frame output</h2>
     <iframe id="testFrame"
             title="JS execution test frame"
-            src="about:blank"
+            srcdoc='<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em"><p id="js">JavaScript is <strong>DISABLED</strong> in this frame</p><script>document.getElementById("js").innerHTML = "JavaScript is <strong>ENABLED</strong> in this frame";</script></body></html>'
             style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:6px;background:var(--panel);display:block;box-sizing:border-box;"></iframe>
+    <p class="small muted">The detector runs automatically when the frame loads.</p>
+  </div>
+
+  <div class="card">
+    <button id="rerunBtn" type="button">Re-run check</button>
+    <p class="status" id="status">Reloads the frame so the detector runs again.</p>
+    <noscript>
+      <p class="warn">
+        JavaScript is disabled on the top-level page, so this button will not work.
+        The frame still reports its own status above: with protection working it
+        should read <em>DISABLED</em>.
+      </p>
+    </noscript>
   </div>
 
   <div class="card">
@@ -80,7 +81,7 @@
         </tr>
         <tr>
           <td>JS disabled (protected)</td>
-          <td>Frame stays empty, or shows &ldquo;JavaScript is DISABLED in this frame&rdquo;</td>
+          <td>JavaScript is DISABLED in this frame</td>
           <td class="ok">Pass &mdash; JS policy propagates to iframe document</td>
         </tr>
         <tr>
@@ -93,28 +94,11 @@
   </div>
 
   <script>
-    function runInFrame() {
-      var status = document.getElementById('status');
+    document.getElementById('rerunBtn').addEventListener('click', function () {
       var iframe = document.getElementById('testFrame');
-      var doc = iframe.contentDocument || iframe.contentWindow.document;
-
-      doc.open();
-      doc.write(
-        '<!doctype html><html><head><meta charset="utf-8"></head>' +
-        '<body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em">' +
-        '<p id="js">JavaScript is <strong>DISABLED</strong> in this frame</p>' +
-        '<' + 'script>' +
-          'document.getElementById("js").innerHTML = ' +
-            '"JavaScript is <strong>ENABLED<\/strong> in this frame";' +
-        '<\/script>' +
-        '</body></html>'
-      );
-      doc.close();
-
-      status.textContent = 'Detector injected into the about:blank frame. See the frame output above.';
-    }
-
-    document.getElementById('runBtn').addEventListener('click', runInFrame);
+      iframe.contentWindow.location.reload();
+      document.getElementById('status').textContent = 'Frame reloaded; the detector ran again.';
+    });
   </script>
 </body>
 </html>

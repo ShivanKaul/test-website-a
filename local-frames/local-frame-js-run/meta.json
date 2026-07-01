@@ -1,5 +1,5 @@
 {
   "title": "JS Execution in Local Frame",
-  "description": "Definitively checks whether an about:blank iframe can run JavaScript. Press the button to inject a document into the frame whose default text says JS is disabled and whose inline script flips it to enabled if it runs. If disabling JS at the top level does not also disable it in the frame, the frame still reports enabled.",
+  "description": "Definitively checks whether a local (srcdoc) iframe can run JavaScript. The frame's inline document defaults to JS disabled and an inline script flips it to enabled if it runs, on load and independent of the top-level page. If disabling JS at the top level does not also disable it in the frame, the frame still reports enabled.",
   "added": "2026-06-30"
 }
