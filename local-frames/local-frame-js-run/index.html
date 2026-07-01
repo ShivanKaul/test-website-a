@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>JS Execution in Local Frame</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="site-header">
+    <h1>JS Execution in <code>about:blank</code> Frame</h1>
+    <p class="muted small">
+      Tests whether disabling JavaScript at the top level also disables it inside
+      a local <code>about:blank</code> iframe document
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>
+      When you press the button, this page creates an <code>about:blank</code> iframe
+      and injects a script into it. That script:
+    </p>
+    <ol>
+      <li>Runs entirely inside the local frame, with no network request.</li>
+      <li>Computes a value in JavaScript:
+          (3+7+11+19+23)&times;4 = <strong>252</strong>.</li>
+      <li>Writes the computed result to the frame&rsquo;s document.</li>
+    </ol>
+    <p>
+      Because this iframe document is local to the embedding page, a browser&rsquo;s
+      script-blocking policy should apply equally to both contexts.
+    </p>
+    <p>
+      <strong>To test:</strong> with JavaScript enabled, press the button and confirm
+      the frame shows <em>&ldquo;Result: 252&rdquo;</em>. Then disable JavaScript for this page,
+      reload, and press the button again. If the frame still displays
+      <em>&ldquo;Result: 252&rdquo;</em> with JS disabled, the browser&rsquo;s JS policy is not
+      correctly propagated to local iframe documents.
+    </p>
+  </div>
+
+  <div class="card">
+    <button id="runBtn" type="button">Run JS in <code>about:blank</code> frame</button>
+    <p class="status" id="status">Press the button to run the script inside the frame.</p>
+    <noscript>
+      <p class="warn">
+        JavaScript is disabled on the top-level page.
+        If protection is working, the button will do nothing and the frame should
+        stay empty (or otherwise not compute a result).
+      </p>
+    </noscript>
+  </div>
+
+  <div class="card" id="resultCard">
+    <h2>Frame output</h2>
+    <iframe id="testFrame"
+            title="JS execution test frame"
+            src="about:blank"
+            style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:6px;background:var(--panel);display:block;box-sizing:border-box;"></iframe>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Frame output</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>JS enabled</td>
+          <td>Result: 252</td>
+          <td class="ok">Expected &mdash; JS runs in frame</td>
+        </tr>
+        <tr>
+          <td>JS disabled (protected)</td>
+          <td>Stays empty / no computed result</td>
+          <td class="ok">Pass &mdash; JS policy propagates to iframe document</td>
+        </tr>
+        <tr>
+          <td>JS disabled (vulnerable)</td>
+          <td>Result: 252</td>
+          <td class="bad">Fail &mdash; frame JS runs despite top-level JS being off</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    function runInFrame() {
+      var status = document.getElementById('status');
+      var iframe = document.getElementById('testFrame');
+      var doc = iframe.contentDocument || iframe.contentWindow.document;
+
+      doc.open();
+      doc.write(
+        '<!doctype html><html><head><meta charset="utf-8"></head>' +
+        '<body style="margin:0;padding:8px 12px;font-family:system-ui,sans-serif;font-size:0.95em">' +
+        '<p id="s">Running…</p>' +
+        '<' + 'script>' +
+          'var numbers = [3, 7, 11, 19, 23];' +
+          'var multiplier = 4;' +
+          'var sum = numbers.reduce(function (a, b) { return a + b; }, 0);' +
+          'document.getElementById("s").textContent = "Result: " + (sum * multiplier);' +
+        '<\/script>' +
+        '</body></html>'
+      );
+      doc.close();
+
+      status.textContent = 'Script injected into the about:blank frame. See the frame output above.';
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runInFrame);
+  </script>
+</body>
+</html>
