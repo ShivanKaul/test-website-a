@@ -1,0 +1,5 @@
+{
+  "title": "Cache Storage Clearing",
+  "description": "Tests whether 'Forget me when I close this site' clears the Cache Storage API (window.caches) after the site is closed.",
+  "added": "2026-07-10"
+}

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cache Storage Clearing test</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .id { font-family: var(--font-mono); font-weight: bold; }
+    #trackingId { font-size: 1.1em; }
+  </style>
+</head>
+<body>
+  <a class="home-link" href="/">← All tests</a>
+  <h1>Cache Storage Clearing test</h1>
+
+  <section class="card">
+    <h2>What this tests</h2>
+    <p>
+      This page writes a persistent tracking id into the Cache Storage API
+      (<code>window.caches</code>) and reads it back. Cache Storage is an
+      origin-scoped, disk-backed store that survives reloads and browser
+      restarts, so it can be abused for cross-session tracking just like
+      cookies or <code>localStorage</code>.
+    </p>
+    <p>
+      Brave's "Forget me when I close this site" (Forgetful Browsing) shield is
+      supposed to purge <em>all</em> of this origin's storage once the last tab
+      for the site is closed. This checks whether Cache Storage is included in
+      that purge.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>How to run it</h2>
+    <ol>
+      <li>Open Brave's Shields panel for this site and enable
+        <strong>"Forget me when I close this site"</strong>. Reload the page.</li>
+      <li>Click <strong>Set tracking id</strong> to write a fresh id into
+        Cache Storage.</li>
+      <li>Click <strong>Get tracking id</strong> to confirm it reads back.</li>
+      <li>Close every tab open to this origin (and optionally quit Brave).</li>
+      <li>Reopen the browser, return to this page, and click
+        <strong>Get tracking id</strong> without setting one first.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Expected behavior</h2>
+    <ul>
+      <li>
+        <strong>With Forgetful Browsing on:</strong> after closing the site the
+        id should be gone. Getting the id should report
+        <span class="ok">no id</span>. If the <em>same</em> id comes back, Cache
+        Storage survived the close and the shield failed to clear it &mdash;
+        a tracking leak.
+      </li>
+      <li>
+        <strong>With the shield off:</strong> the id is expected to persist
+        across restarts. This is the normal, standards-compliant behavior of
+        Cache Storage and confirms the test actually persists state.
+      </li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Run</h2>
+    <p>Origin: <code id="origin"></code></p>
+    <p>Cache Storage supported: <code id="support"></code></p>
+
+    <p>
+      <button id="setBtn">Set tracking id</button>
+      <button id="getBtn">Get tracking id</button>
+      <button id="clearBtn">Clear tracking id</button>
+    </p>
+
+    <p>Tracking id: <span class="id" id="trackingId">&mdash;</span></p>
+    <p class="status" id="status"></p>
+    <p class="verdict" id="verdict"></p>
+  </section>
+
+  <script>
+    const CACHE_NAME = 'tracking-cache-v1';
+    // A synthetic request URL used purely as the cache key. It is never fetched.
+    const KEY_URL = '/cache-storage-clearing/__tracking-id';
+
+    const $ = (id) => document.getElementById(id);
+    const supported = 'caches' in window;
+
+    $('origin').textContent = location.origin;
+    $('support').textContent = supported ? 'yes' : 'no';
+
+    function setStatus(msg) { $('status').textContent = msg; }
+
+    function setVerdict(text, cls) {
+      const v = $('verdict');
+      v.textContent = text;
+      v.className = 'verdict ' + (cls || '');
+    }
+
+    function newId() {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function readId() {
+      const cache = await caches.open(CACHE_NAME);
+      const res = await cache.match(KEY_URL);
+      return res ? res.text() : null;
+    }
+
+    async function setId() {
+      const id = newId();
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(KEY_URL, new Response(id, {
+        headers: { 'content-type': 'text/plain' },
+      }));
+      $('trackingId').textContent = id;
+      setStatus('Wrote a fresh tracking id into Cache Storage (cache "' + CACHE_NAME + '").');
+      setVerdict('');
+    }
+
+    async function getId() {
+      const id = await readId();
+      if (id) {
+        $('trackingId').textContent = id;
+        setStatus('Read tracking id back from Cache Storage.');
+        setVerdict(
+          'Tracking id is present. If you set it in a previous session and it ' +
+          'persisted after closing this site with Forgetful Browsing on, that ' +
+          'is a clearing failure.',
+          'leak'
+        );
+      } else {
+        $('trackingId').textContent = '—';
+        setStatus('No tracking id found in Cache Storage.');
+        setVerdict('No id present. Cache Storage is empty for this origin.', 'ok');
+      }
+    }
+
+    async function clearId() {
+      await caches.delete(CACHE_NAME);
+      $('trackingId').textContent = '—';
+      setStatus('Manually deleted the cache.');
+      setVerdict('');
+    }
+
+    function guard(fn) {
+      return async () => {
+        if (!supported) {
+          setStatus('Cache Storage API is not available in this context.');
+          return;
+        }
+        try {
+          await fn();
+        } catch (err) {
+          setStatus('Error: ' + err);
+        }
+      };
+    }
+
+    $('setBtn').onclick = guard(setId);
+    $('getBtn').onclick = guard(getId);
+    $('clearBtn').onclick = guard(clearId);
+
+    // Show the current state on load without writing anything.
+    if (supported) guard(getId)();
+  </script>
+</body>
+</html>
