@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Google Font Loading test</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .sample { font-size: 2.4em; line-height: 1.3; margin: 6px 0; }
+    .sample.google { font-family: "Pacifico", cursive; }
+    .sample.fallback { font-family: monospace; }
+    .label { font-size: 0.8em; opacity: 0.6; margin: 0; }
+    td.num { font-family: var(--font-mono); text-align: right; }
+  </style>
+</head>
+<body>
+  <a class="home-link" href="/">← All tests</a>
+  <h1>Google Font Loading test</h1>
+
+  <section class="card">
+    <h2>What this tests</h2>
+    <p>
+      This page requests the <code>Pacifico</code> web font from Google's servers
+      (the stylesheet from <code>fonts.googleapis.com</code>, the font file from
+      <code>fonts.gstatic.com</code>) and then checks, using several independent
+      signals, whether the font actually downloaded and rendered.
+    </p>
+    <p class="small">
+      Browsers or extensions that block, proxy, or locally substitute Google Fonts
+      (for privacy reasons) will make some or all of these checks fail. That is the
+      point of the test: to show whether the remote download succeeded.
+    </p>
+  </section>
+
+  <section class="card">
+    <button id="runBtn">Run test</button>
+    <p class="status" id="status">Idle.</p>
+  </section>
+
+  <section class="card" id="samplesCard" style="display:none;">
+    <h2>Rendered samples</h2>
+    <p class="label">Requested Google font (<code>Pacifico</code>):</p>
+    <div class="sample google" id="sampleGoogle">Sphinx of black quartz, judge my vow</div>
+    <p class="label">Fallback (<code>monospace</code>):</p>
+    <div class="sample fallback">Sphinx of black quartz, judge my vow</div>
+  </section>
+
+  <section class="card" id="resultsCard" style="display:none;">
+    <h2>Checks</h2>
+    <table>
+      <thead>
+        <tr><th>Signal</th><th>Result</th><th>Detail</th></tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="verdict" id="verdict"></p>
+  </section>
+
+  <script>
+    (function () {
+      var FONT_FAMILY = "Pacifico";
+      var CSS_URL = "https://fonts.googleapis.com/css2?family=Pacifico&display=swap";
+      var SAMPLE_TEXT = "Sphinx of black quartz, judge my vow";
+
+      var runBtn = document.getElementById("runBtn");
+      var statusEl = document.getElementById("status");
+      var samplesCard = document.getElementById("samplesCard");
+      var resultsCard = document.getElementById("resultsCard");
+      var resultsBody = document.getElementById("resultsBody");
+      var verdictEl = document.getElementById("verdict");
+
+      function setStatus(msg) { statusEl.textContent = msg; }
+
+      function addRow(signal, ok, detail) {
+        var tr = document.createElement("tr");
+        var tdSignal = document.createElement("td");
+        tdSignal.textContent = signal;
+        var tdResult = document.createElement("td");
+        var span = document.createElement("span");
+        if (ok === true) { span.className = "ok"; span.textContent = "PASS"; }
+        else if (ok === false) { span.className = "bad"; span.textContent = "FAIL"; }
+        else { span.className = "warn"; span.textContent = "N/A"; }
+        tdResult.appendChild(span);
+        var tdDetail = document.createElement("td");
+        tdDetail.textContent = detail;
+        tr.appendChild(tdSignal);
+        tr.appendChild(tdResult);
+        tr.appendChild(tdDetail);
+        resultsBody.appendChild(tr);
+      }
+
+      // Measure the pixel width of SAMPLE_TEXT rendered in a given font stack,
+      // via a canvas. Differing widths between the Google font and its generic
+      // fallback indicate the custom font is really being used.
+      function measureWidth(fontStack) {
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        ctx.font = '32px ' + fontStack;
+        return ctx.measureText(SAMPLE_TEXT).width;
+      }
+
+      // Look for the actual font-file download from Google's CDN in the
+      // Resource Timing entries. A successful cross-origin download shows up
+      // as an entry for fonts.gstatic.com.
+      function findFontResource() {
+        if (!performance || !performance.getEntriesByType) return null;
+        var entries = performance.getEntriesByType("resource");
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].name.indexOf("fonts.gstatic.com") !== -1) return entries[i];
+        }
+        return null;
+      }
+
+      async function run() {
+        runBtn.disabled = true;
+        resultsBody.innerHTML = "";
+        verdictEl.textContent = "";
+        samplesCard.style.display = "block";
+        resultsCard.style.display = "block";
+        setStatus("Requesting stylesheet from fonts.googleapis.com ...");
+
+        // Check 1: fetch the Google Fonts CSS and confirm it references a font file.
+        var cssOk = null, cssDetail = "";
+        var fontFileUrl = null;
+        try {
+          var resp = await fetch(CSS_URL, { mode: "cors" });
+          var cssText = await resp.text();
+          var m = cssText.match(/url\((https:\/\/fonts\.gstatic\.com[^)]+)\)/);
+          if (resp.ok && m) {
+            cssOk = true;
+            fontFileUrl = m[1];
+            cssDetail = "Stylesheet loaded; font file: " + fontFileUrl.split("/").pop();
+          } else {
+            cssOk = false;
+            cssDetail = "HTTP " + resp.status + "; no gstatic font URL found in CSS.";
+          }
+        } catch (e) {
+          cssOk = false;
+          cssDetail = "Fetch failed: " + e.message;
+        }
+        addRow("Stylesheet from fonts.googleapis.com", cssOk, cssDetail);
+
+        // Inject the stylesheet <link> so the font enters the document's font set.
+        setStatus("Loading font into the page ...");
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = CSS_URL;
+        document.head.appendChild(link);
+
+        // Check 2: use the CSS Font Loading API to actually load the face.
+        var loadOk = null, loadDetail = "";
+        try {
+          await document.fonts.load('32px "' + FONT_FAMILY + '"', SAMPLE_TEXT);
+          await document.fonts.ready;
+          var loaded = document.fonts.check('32px "' + FONT_FAMILY + '"');
+          loadOk = loaded;
+          loadDetail = loaded
+            ? "document.fonts reports the face as loaded."
+            : "document.fonts.check() returned false; face not available.";
+        } catch (e) {
+          loadOk = false;
+          loadDetail = "Font loading API error: " + e.message;
+        }
+        addRow("CSS Font Loading API", loadOk, loadDetail);
+
+        // Check 3: width comparison against the generic fallback.
+        var wGoogle = measureWidth('"' + FONT_FAMILY + '", monospace');
+        var wFallback = measureWidth("monospace");
+        var delta = Math.abs(wGoogle - wFallback);
+        var widthOk = delta > 0.5;
+        addRow(
+          "Rendered-width vs fallback",
+          widthOk,
+          "Google: " + wGoogle.toFixed(1) + "px, fallback: " + wFallback.toFixed(1) +
+            "px, delta: " + delta.toFixed(1) + "px"
+        );
+
+        // Check 4: Resource Timing entry for the gstatic font file.
+        var res = findFontResource();
+        var resOk, resDetail;
+        if (res) {
+          // transferSize > 0 means bytes came over the network (0 can mean an
+          // opaque cross-origin response, so treat presence of the entry as the
+          // primary signal and report the size for context).
+          resOk = true;
+          resDetail = "Downloaded from " + res.name.replace(/^https:\/\//, "") +
+            (typeof res.transferSize === "number"
+              ? " (transferSize " + res.transferSize + " bytes)"
+              : "");
+        } else {
+          resOk = false;
+          resDetail = "No fonts.gstatic.com entry in Resource Timing; font file was not fetched.";
+        }
+        addRow("Font file download (Resource Timing)", resOk, resDetail);
+
+        // Verdict: the download "worked" if the face loaded and rendered.
+        var worked = loadOk === true && widthOk;
+        if (worked) {
+          verdictEl.className = "verdict ok";
+          verdictEl.textContent = "✓ The Google font downloaded and rendered successfully.";
+          setStatus("Done.");
+        } else {
+          verdictEl.className = "verdict bad";
+          verdictEl.textContent = "✗ The Google font did not fully load; the download appears blocked or failed.";
+          setStatus("Done.");
+        }
+
+        runBtn.disabled = false;
+      }
+
+      runBtn.addEventListener("click", run);
+    })();
+  </script>
+</body>
+</html>

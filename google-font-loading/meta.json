@@ -1,0 +1,5 @@
+{
+  "title": "Google Font Loading",
+  "description": "Loads a web font from Google's servers (fonts.googleapis.com / fonts.gstatic.com) and checks whether the download actually succeeded.",
+  "added": "2026-07-14"
+}
