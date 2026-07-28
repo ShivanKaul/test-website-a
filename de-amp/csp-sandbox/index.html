@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>De-AMP CSP Sandbox Bypass Test</title>
+  <style>
+    ol { margin: 8px 0 0 22px; }
+  </style>
+</head>
+<body>
+<h1>De-AMP CSP Sandbox Bypass Test</h1>
+  <p>Site A: <code>test-website-a.pages.dev</code></p>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>A page served with <code>Content-Security-Policy: sandbox</code> (no
+    <code>allow-*</code> flags) is forbidden from navigating the top-level frame.
+    A <code>&lt;meta http-equiv="refresh"&gt;</code> on such a page is refused.</p>
+    <p>Brave's De-AMP feature sniffs every <code>text/html</code> response for AMP
+    markup plus a <code>&lt;link rel="canonical"&gt;</code> and redirects the top
+    frame to that canonical URL. It does not inspect the response's CSP header, so
+    a sandboxed page still gets navigated to its (attacker-controlled) canonical
+    URL, bypassing the sandbox restriction.</p>
+  </div>
+
+  <div class="card">
+    <h2>Steps</h2>
+    <ol>
+      <li>Enable <code>brave://settings/privacy</code> &rarr; "Auto-redirect AMP
+      pages" (on by default).</li>
+      <li>Open the <b>sandboxed AMP page</b> link below. If De-AMP ignores CSP you
+      are redirected to <code>/de-amp/csp-sandbox/landed.html</code>. That is the
+      <b>bug</b>.</li>
+      <li>Open the <b>sandboxed meta-refresh</b> control. You should stay put; the
+      console shows the refresh was refused because the document is sandboxed. This
+      confirms the header is otherwise honored.</li>
+      <li>Open the sandboxed AMP page in <b>Chrome</b> (no De-AMP). You should stay
+      put, confirming De-AMP is the cause.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Test Links</h2>
+    <p><a href="/de-amp/csp-sandbox/sandbox-amp">1. Sandboxed AMP page (CSP: sandbox) -- De-AMP should NOT redirect, but does</a></p>
+    <p><a href="/de-amp/csp-sandbox/sandbox-meta-refresh">2. Sandboxed meta-refresh (control) -- sandbox correctly blocks navigation</a></p>
+    <p><a href="/de-amp/csp-sandbox/sandbox-amp?csp=off">3. AMP page, no CSP (control) -- ordinary, expected De-AMP redirect</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Expected results</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <th style="text-align:left;padding:6px;">Link</th>
+        <th style="text-align:left;padding:6px;">Protected browser</th>
+        <th style="text-align:left;padding:6px;">Vulnerable (current Brave)</th>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">1. Sandboxed AMP page</td>
+        <td style="padding:6px;">Stays on page</td>
+        <td style="padding:6px;">Redirected to <code>landed.html</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(127,127,127,0.28);">
+        <td style="padding:6px;">2. Sandboxed meta-refresh</td>
+        <td style="padding:6px;">Stays on page (refused)</td>
+        <td style="padding:6px;">Stays on page (refused)</td>
+      </tr>
+      <tr>
+        <td style="padding:6px;">3. AMP page, no CSP</td>
+        <td style="padding:6px;">Redirected (expected)</td>
+        <td style="padding:6px;">Redirected (expected)</td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

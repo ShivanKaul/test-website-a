@@ -1,0 +1,5 @@
+{
+  "title": "De-AMP Omnibox URL Spoof",
+  "description": "De-AMP re-issues the canonical navigation as browser-initiated (is_renderer_initiated hard-coded false), which lets Chromium show the pending canonical URL in the omnibox. Pointing the canonical link at a dropped-SYN endpoint keeps the navigation pending, so an attacker's page paints an arbitrary https URL over its own content.",
+  "added": "2026-07-27"
+}

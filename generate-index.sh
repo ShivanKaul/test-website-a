@@ -68,9 +68,9 @@ echo "Generated index.html with ${count} test cards."
 
 # ---------------------------------------------------------------------------
 # Generate sub-index pages for group directories that contain test sub-dirs.
-# Currently: local-frames/
+# Currently: local-frames/, de-amp/
 # ---------------------------------------------------------------------------
-for group_dir in local-frames; do
+for group_dir in local-frames de-amp; do
   [ -d "$group_dir" ] || continue
   group_meta="${group_dir}/meta.json"
   [ -f "$group_meta" ] || continue

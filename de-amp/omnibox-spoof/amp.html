@@ -1,0 +1,17 @@
+<!doctype html>
+<html amp>
+<head>
+  <meta charset="utf-8">
+  <!-- Canonical points at a dropped-SYN endpoint (filtered port). De-AMP cancels
+       this document and re-issues a browser-initiated navigation to this URL.
+       Because the SYN is dropped, the navigation stays pending, so the omnibox
+       keeps showing this URL while index.html remains the rendered/committed page.
+       This href MUST match SPOOFED in index.html. -->
+  <link rel="canonical" href="https://google.com:444/">
+  <title>AMP trampoline</title>
+</head>
+<body>
+  <p>AMP trampoline. If you can read this, De-AMP did not fire (feature disabled,
+  not Brave, or canonical extraction failed).</p>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "title": "De-AMP CSP Sandbox Bypass",
+  "description": "Tests whether De-AMP redirects a page to its attacker-controlled canonical URL even when the response is served with Content-Security-Policy: sandbox, a header that should forbid the page from navigating the top-level frame.",
+  "added": "2026-07-09"
+}

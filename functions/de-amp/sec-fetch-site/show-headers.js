@@ -63,7 +63,7 @@ export async function onRequestGet(context) {
     </table>
   </div>
 
-  <p><a href="/de-amp/">Back to test page</a></p>
+  <p><a href="/de-amp/sec-fetch-site/">Back to test page</a></p>
 
   <script>
     document.getElementById('referrer').textContent = document.referrer || '(empty)';

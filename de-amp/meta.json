@@ -1,5 +1,5 @@
 {
-  "title": "De-AMP Sec-Fetch-Site Bypass",
-  "description": "Tests whether De-AMP redirects preserve the cross-site hop in the Sec-Fetch-Site header.",
-  "added": "2026-03-11"
+  "title": "De-AMP Tests",
+  "description": "Tests for Brave's De-AMP feature: canonical-URL extraction and redirect behavior, including Sec-Fetch-Site preservation, CSP sandbox enforcement, Content-Disposition handling, and address-bar (omnibox) spoofing.",
+  "added": "2026-07-27"
 }

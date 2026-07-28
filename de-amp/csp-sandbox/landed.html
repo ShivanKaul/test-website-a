@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>De-AMP CSP Sandbox: Landed</title>
+  <style>
+    .fail { border-color: rgba(200,0,0,0.7); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; }
+    .tag-fail { background: rgba(200,0,0,0.15); color: rgba(180,0,0,1); }
+    @media (prefers-color-scheme: dark) {
+      .tag-fail { color: rgba(255,100,100,1); }
+    }
+  </style>
+</head>
+<body>
+  <h1>De-AMP CSP Sandbox: Landed on canonical URL</h1>
+
+  <div class="card fail">
+    <p><span class="tag tag-fail">NAVIGATED</span> You were force-navigated here
+    from a page served with <code>Content-Security-Policy: sandbox</code>.</p>
+    <p>This is the canonical URL from that page's <code>&lt;link rel="canonical"&gt;</code>.
+    In the real threat model it is an attacker-controlled destination. The sandbox
+    directive should have prevented the source page from navigating the top frame,
+    but De-AMP performed the redirect without consulting CSP.</p>
+  </div>
+
+  <div class="card">
+    <h2>What happened</h2>
+    <ol style="margin:8px 0 0 22px;">
+      <li>You opened <code>/de-amp/csp-sandbox/sandbox-amp</code>, served with
+      <code>Content-Security-Policy: sandbox</code> and AMP markup.</li>
+      <li>De-AMP sniffed the body, found the AMP attribute and canonical link, and
+      redirected the top frame here, ignoring the sandbox directive.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <p><a href="/de-amp/csp-sandbox/">Back to the test page</a></p>
+  </div>
+</body>
+</html>
