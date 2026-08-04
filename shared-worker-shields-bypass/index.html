@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>SharedWorker WebSocket Shields Bypass</title>
+  <style>
+    #results td:last-child { font-weight: bold; }
+    .ok { color: #1a7f37; }
+    .blocked { color: #b42318; }
+    .pending { opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <h1>SharedWorker WebSocket Shields Bypass</h1>
+  <p>Site A: <code>test-website-a.pages.dev</code></p>
+
+  <div class="card">
+    <h2>What this tests</h2>
+    <p>A page can move a WebSocket connection into a <code>SharedWorker</code> to
+    bypass Brave Shields network filtering. The same WebSocket endpoint is opened
+    three ways: directly from the <b>page</b>, from a <b>dedicated worker</b>, and
+    from a <b>shared worker</b>. All three target the same same-origin endpoint
+    <code id="ws-endpoint"></code>.</p>
+    <p>Per the report, Brave only installs its WebSocket proxy when Chromium
+    supplies a non-null <code>RenderFrameHost</code>
+    (<code>WillInterceptWebSocket</code> returns <code>frame != nullptr</code>).
+    A <code>SharedWorker</code> is frameless, so its socket skips
+    <code>BraveProxyingWebSocket</code> and the adblock engines entirely.</p>
+  </div>
+
+  <div class="card">
+    <h2>How to reproduce the block</h2>
+    <p>With default Shields, all three connect (nothing here is on a default
+    filter list). To demonstrate the bypass, add a custom Shields filter that
+    blocks this origin's WebSocket endpoint, then reload:</p>
+    <pre><code>||test-website-a.pages.dev/shared-worker-shields-bypass/ws</code></pre>
+    <p>Expected with the filter active: <b>page</b> and <b>dedicated-worker</b>
+    show <span class="blocked">ERROR</span> (blocked), while
+    <b>shared-worker</b> shows <span class="ok">OPEN</span> (bypass).</p>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <table id="results">
+      <tr><th>Initiator</th><th>WebSocket result</th></tr>
+      <tr><td>page</td><td id="r-page" class="pending">testing…</td></tr>
+      <tr><td>dedicated-worker</td><td id="r-dedicated" class="pending">testing…</td></tr>
+      <tr><td>shared-worker</td><td id="r-shared" class="pending">testing…</td></tr>
+    </table>
+    <p class="verdict" id="verdict"></p>
+    <p><button id="rerun">Re-run</button></p>
+  </div>
+
+  <script>
+    const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') +
+      location.host + '/shared-worker-shields-bypass/ws';
+    document.getElementById('ws-endpoint').textContent = WS_URL;
+
+    function setResult(id, status) {
+      const cell = document.getElementById(id);
+      cell.textContent = status;
+      cell.className = status === 'OPEN' ? 'ok' : 'blocked';
+    }
+
+    // Open the WebSocket directly from the page context.
+    function testPage(wsUrl) {
+      return new Promise((resolve) => {
+        let settled = false;
+        const done = (s) => { if (!settled) { settled = true; resolve(s); } };
+        try {
+          const ws = new WebSocket(wsUrl);
+          ws.onopen = () => done('OPEN');
+          ws.onerror = () => done('ERROR');
+          ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'ERROR');
+        } catch (e) { done('ERROR'); }
+      });
+    }
+
+    function testDedicated(wsUrl) {
+      return new Promise((resolve) => {
+        try {
+          const w = new Worker('/shared-worker-shields-bypass/dedicated-worker.js');
+          w.onmessage = (e) => resolve(e.data.status);
+          w.onerror = () => resolve('ERROR');
+          w.postMessage({ wsUrl });
+        } catch (e) { resolve('ERROR'); }
+      });
+    }
+
+    function testShared(wsUrl) {
+      return new Promise((resolve) => {
+        try {
+          // Cache-bust the worker URL so each run gets a fresh SharedWorker
+          // instance rather than reusing one that already settled.
+          const w = new SharedWorker(
+            '/shared-worker-shields-bypass/shared-worker.js?r=' + Date.now());
+          w.port.onmessage = (e) => resolve(e.data.status);
+          w.onerror = () => resolve('ERROR');
+          w.port.start();
+          w.port.postMessage({ wsUrl });
+        } catch (e) { resolve('ERROR'); }
+      });
+    }
+
+    async function run() {
+      for (const id of ['r-page', 'r-dedicated', 'r-shared']) {
+        const cell = document.getElementById(id);
+        cell.textContent = 'testing…';
+        cell.className = 'pending';
+      }
+      document.getElementById('verdict').textContent = '';
+
+      const [page, dedicated, shared] = await Promise.all([
+        testPage(WS_URL),
+        testDedicated(WS_URL),
+        testShared(WS_URL),
+      ]);
+
+      setResult('r-page', page);
+      setResult('r-dedicated', dedicated);
+      setResult('r-shared', shared);
+
+      const verdict = document.getElementById('verdict');
+      if (shared === 'OPEN' && (page === 'ERROR' || dedicated === 'ERROR')) {
+        verdict.textContent =
+          'BYPASS: the SharedWorker WebSocket connected while a page/dedicated-worker socket to the same endpoint was blocked.';
+        verdict.className = 'verdict blocked';
+      } else if (page === 'OPEN' && dedicated === 'OPEN' && shared === 'OPEN') {
+        verdict.textContent =
+          'No filter active (all initiators connected). Add the custom filter above and re-run to see the bypass.';
+        verdict.className = 'verdict';
+      } else {
+        verdict.textContent =
+          'All initiators blocked consistently (expected correct behavior).';
+        verdict.className = 'verdict ok';
+      }
+    }
+
+    document.getElementById('rerun').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>
