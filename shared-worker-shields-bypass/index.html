@@ -20,11 +20,6 @@
     three ways: directly from the <b>page</b>, from a <b>dedicated worker</b>, and
     from a <b>shared worker</b>. All three target the same same-origin endpoint
     <code id="ws-endpoint"></code>.</p>
-    <p>Per the report, Brave only installs its WebSocket proxy when Chromium
-    supplies a non-null <code>RenderFrameHost</code>
-    (<code>WillInterceptWebSocket</code> returns <code>frame != nullptr</code>).
-    A <code>SharedWorker</code> is frameless, so its socket skips
-    <code>BraveProxyingWebSocket</code> and the adblock engines entirely.</p>
   </div>
 
   <div class="card">
