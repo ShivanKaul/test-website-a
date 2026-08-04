@@ -29,7 +29,7 @@
     blocks this origin's WebSocket endpoint, then reload:</p>
     <pre><code>||test-website-a.pages.dev/shared-worker-shields-bypass/socket</code></pre>
     <p>Expected with the filter active: <b>page</b> and <b>dedicated-worker</b>
-    show <span class="blocked">ERROR</span> (blocked), while
+    show <span class="blocked">BLOCKED</span>, while
     <b>shared-worker</b> shows <span class="ok">OPEN</span> (bypass).</p>
   </div>
 
@@ -64,9 +64,9 @@
         try {
           const ws = new WebSocket(wsUrl);
           ws.onopen = () => done('OPEN');
-          ws.onerror = () => done('ERROR');
-          ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'ERROR');
-        } catch (e) { done('ERROR'); }
+          ws.onerror = () => done('BLOCKED');
+          ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'BLOCKED');
+        } catch (e) { done('BLOCKED'); }
       });
     }
 
@@ -75,9 +75,9 @@
         try {
           const w = new Worker('/shared-worker-shields-bypass/dedicated-worker.js');
           w.onmessage = (e) => resolve(e.data.status);
-          w.onerror = () => resolve('ERROR');
+          w.onerror = () => resolve('BLOCKED');
           w.postMessage({ wsUrl });
-        } catch (e) { resolve('ERROR'); }
+        } catch (e) { resolve('BLOCKED'); }
       });
     }
 
@@ -89,10 +89,10 @@
           const w = new SharedWorker(
             '/shared-worker-shields-bypass/shared-worker.js?r=' + Date.now());
           w.port.onmessage = (e) => resolve(e.data.status);
-          w.onerror = () => resolve('ERROR');
+          w.onerror = () => resolve('BLOCKED');
           w.port.start();
           w.port.postMessage({ wsUrl });
-        } catch (e) { resolve('ERROR'); }
+        } catch (e) { resolve('BLOCKED'); }
       });
     }
 
@@ -115,7 +115,7 @@
       setResult('r-shared', shared);
 
       const verdict = document.getElementById('verdict');
-      if (shared === 'OPEN' && (page === 'ERROR' || dedicated === 'ERROR')) {
+      if (shared === 'OPEN' && (page === 'BLOCKED' || dedicated === 'BLOCKED')) {
         verdict.textContent =
           'BYPASS: the SharedWorker WebSocket connected while a page/dedicated-worker socket to the same endpoint was blocked.';
         verdict.className = 'verdict blocked';

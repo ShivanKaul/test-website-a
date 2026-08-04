@@ -14,9 +14,9 @@ self.onmessage = (e) => {
   try {
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => done('OPEN');
-    ws.onerror = () => done('ERROR');
-    ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'ERROR');
+    ws.onerror = () => done('BLOCKED');
+    ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'BLOCKED');
   } catch (err) {
-    done('ERROR');
+    done('BLOCKED');
   }
 };

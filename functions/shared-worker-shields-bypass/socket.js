@@ -5,7 +5,7 @@
 // back the context label the client encoded in the ?ctx= query param, so the
 // page can prove which initiator (page / dedicated-worker / shared-worker)
 // actually reached the server. If Shields blocks a given initiator, that
-// socket never connects and the page shows ERROR for it.
+// socket never connects and the page shows BLOCKED for it.
 //
 // The client points a filtered hostname (e.g. googleadservices.com) at this
 // origin so a default Shields network filter matches the request. Whichever
