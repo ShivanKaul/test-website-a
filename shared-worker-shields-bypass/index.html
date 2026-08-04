@@ -32,7 +32,7 @@
     <p>With default Shields, all three connect (nothing here is on a default
     filter list). To demonstrate the bypass, add a custom Shields filter that
     blocks this origin's WebSocket endpoint, then reload:</p>
-    <pre><code>||test-website-a.pages.dev/shared-worker-shields-bypass/ws</code></pre>
+    <pre><code>||test-website-a.pages.dev/shared-worker-shields-bypass/socket</code></pre>
     <p>Expected with the filter active: <b>page</b> and <b>dedicated-worker</b>
     show <span class="blocked">ERROR</span> (blocked), while
     <b>shared-worker</b> shows <span class="ok">OPEN</span> (bypass).</p>
@@ -52,7 +52,7 @@
 
   <script>
     const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') +
-      location.host + '/shared-worker-shields-bypass/ws';
+      location.host + '/shared-worker-shields-bypass/socket';
     document.getElementById('ws-endpoint').textContent = WS_URL;
 
     function setResult(id, status) {
