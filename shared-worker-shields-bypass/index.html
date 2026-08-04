@@ -46,9 +46,12 @@
   </div>
 
   <script>
-    const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') +
+    const WS_BASE = (location.protocol === 'https:' ? 'wss://' : 'ws://') +
       location.host + '/shared-worker-shields-bypass/socket';
-    document.getElementById('ws-endpoint').textContent = WS_URL;
+    document.getElementById('ws-endpoint').textContent = WS_BASE;
+
+    // OPEN requires the server's {hello:true, ctx} reply, not just a handshake.
+    const TIMEOUT_MS = 5000;
 
     function setResult(id, status) {
       const cell = document.getElementById(id);
@@ -56,43 +59,59 @@
       cell.className = status === 'OPEN' ? 'ok' : 'blocked';
     }
 
-    // Open the WebSocket directly from the page context.
-    function testPage(wsUrl) {
+    function testPage(ctx) {
       return new Promise((resolve) => {
+        let ws;
         let settled = false;
-        const done = (s) => { if (!settled) { settled = true; resolve(s); } };
+        const done = (s) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { ws && ws.close(1000); } catch (e) {}
+          resolve(s);
+        };
+        const timer = setTimeout(() => done('TIMEOUT'), TIMEOUT_MS);
         try {
-          const ws = new WebSocket(wsUrl);
-          ws.onopen = () => done('OPEN');
+          ws = new WebSocket(WS_BASE + '?ctx=' + ctx);
+          ws.onmessage = (e) => {
+            try {
+              const m = JSON.parse(e.data);
+              done(m.hello === true && m.ctx === ctx ? 'OPEN' : 'BLOCKED');
+            } catch (err) { done('BLOCKED'); }
+          };
           ws.onerror = () => done('BLOCKED');
-          ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'BLOCKED');
+          ws.onclose = () => done('BLOCKED');
         } catch (e) { done('BLOCKED'); }
       });
     }
 
-    function testDedicated(wsUrl) {
+    function testDedicated(ctx) {
       return new Promise((resolve) => {
+        let w;
+        const done = (s) => { clearTimeout(timer); try { w && w.terminate(); } catch (e) {} resolve(s); };
+        const timer = setTimeout(() => done('TIMEOUT'), TIMEOUT_MS + 500);
         try {
-          const w = new Worker('/shared-worker-shields-bypass/dedicated-worker.js');
-          w.onmessage = (e) => resolve(e.data.status);
-          w.onerror = () => resolve('BLOCKED');
-          w.postMessage({ wsUrl });
-        } catch (e) { resolve('BLOCKED'); }
+          w = new Worker('/shared-worker-shields-bypass/dedicated-worker.js');
+          w.onmessage = (e) => done(e.data.status);
+          w.onerror = () => done('BLOCKED');
+          w.postMessage({ wsBase: WS_BASE, ctx });
+        } catch (e) { done('BLOCKED'); }
       });
     }
 
-    function testShared(wsUrl) {
+    function testShared(ctx) {
       return new Promise((resolve) => {
+        let w;
+        const done = (s) => { clearTimeout(timer); try { w && w.port.close(); } catch (e) {} resolve(s); };
+        const timer = setTimeout(() => done('TIMEOUT'), TIMEOUT_MS + 500);
         try {
-          // Cache-bust the worker URL so each run gets a fresh SharedWorker
-          // instance rather than reusing one that already settled.
-          const w = new SharedWorker(
-            '/shared-worker-shields-bypass/shared-worker.js?r=' + Date.now());
-          w.port.onmessage = (e) => resolve(e.data.status);
-          w.onerror = () => resolve('BLOCKED');
+          // Cache-bust so each run gets a fresh SharedWorker.
+          w = new SharedWorker('/shared-worker-shields-bypass/shared-worker.js?r=' + Date.now());
+          w.port.onmessage = (e) => done(e.data.status);
+          w.onerror = () => done('BLOCKED');
           w.port.start();
-          w.port.postMessage({ wsUrl });
-        } catch (e) { resolve('BLOCKED'); }
+          w.port.postMessage({ wsBase: WS_BASE, ctx });
+        } catch (e) { done('BLOCKED'); }
       });
     }
 
@@ -105,9 +124,9 @@
       document.getElementById('verdict').textContent = '';
 
       const [page, dedicated, shared] = await Promise.all([
-        testPage(WS_URL),
-        testDedicated(WS_URL),
-        testShared(WS_URL),
+        testPage('page'),
+        testDedicated('dedicated'),
+        testShared('shared'),
       ]);
 
       setResult('r-page', page);
@@ -115,18 +134,24 @@
       setResult('r-shared', shared);
 
       const verdict = document.getElementById('verdict');
-      if (shared === 'OPEN' && (page === 'BLOCKED' || dedicated === 'BLOCKED')) {
+      if (page === 'BLOCKED' && dedicated === 'BLOCKED' && shared === 'OPEN') {
         verdict.textContent =
-          'BYPASS: the SharedWorker WebSocket connected while a page/dedicated-worker socket to the same endpoint was blocked.';
+          'BYPASS: the SharedWorker WebSocket connected while the page and dedicated-worker sockets to the same endpoint were blocked.';
         verdict.className = 'verdict blocked';
       } else if (page === 'OPEN' && dedicated === 'OPEN' && shared === 'OPEN') {
         verdict.textContent =
           'No filter active (all initiators connected). Add the custom filter above and re-run to see the bypass.';
         verdict.className = 'verdict';
-      } else {
+      } else if (page === 'BLOCKED' && dedicated === 'BLOCKED' && shared === 'BLOCKED') {
         verdict.textContent =
           'All initiators blocked consistently (expected correct behavior).';
         verdict.className = 'verdict ok';
+      } else {
+        verdict.textContent =
+          'Inconclusive: unexpected mix of results (' +
+          'page=' + page + ', dedicated-worker=' + dedicated + ', shared-worker=' + shared +
+          '). Re-run to retry.';
+        verdict.className = 'verdict';
       }
     }
 

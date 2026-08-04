@@ -1,30 +1,33 @@
-// Shared worker: opens the WebSocket from a SharedWorkerGlobalScope. Per the
-// report, Brave only installs its WebSocket proxy when Chromium supplies a
-// non-null RenderFrameHost (BraveContentBrowserClient::WillInterceptWebSocket
-// returns frame != nullptr). A SharedWorker has no RenderFrameHost, so the
-// socket takes the frameless path, BraveProxyingWebSocket is never created,
-// the adblock engines never see the request, and the connection succeeds even
-// when a default Shields filter would block the same endpoint from the page.
+// Shared worker: frameless, so Brave skips WebSocket interception (the bypass).
+
+function connect(wsBase, ctx, report) {
+  let ws;
+  let settled = false;
+  const done = (status) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    try { ws && ws.close(1000); } catch (e) {}
+    report(status);
+  };
+  const timer = setTimeout(() => done('TIMEOUT'), 5000);
+  try {
+    ws = new WebSocket(wsBase + '?ctx=' + ctx);
+    ws.onmessage = (m) => {
+      try {
+        const d = JSON.parse(m.data);
+        done(d.hello === true && d.ctx === ctx ? 'OPEN' : 'BLOCKED');
+      } catch (e) { done('BLOCKED'); }
+    };
+    ws.onerror = () => done('BLOCKED');
+    ws.onclose = () => done('BLOCKED');
+  } catch (e) { done('BLOCKED'); }
+}
 
 self.onconnect = (e) => {
   const port = e.ports[0];
   port.onmessage = (msg) => {
-    const wsUrl = msg.data.wsUrl;
-    let settled = false;
-    const done = (status) => {
-      if (settled) return;
-      settled = true;
-      port.postMessage({ status });
-    };
-
-    try {
-      const ws = new WebSocket(wsUrl);
-      ws.onopen = () => done('OPEN');
-      ws.onerror = () => done('BLOCKED');
-      ws.onclose = (ev) => done(ev.wasClean && ev.code === 1000 ? 'OPEN' : 'BLOCKED');
-    } catch (err) {
-      done('BLOCKED');
-    }
+    connect(msg.data.wsBase, msg.data.ctx, (status) => port.postMessage({ status }));
   };
   port.start();
 };
