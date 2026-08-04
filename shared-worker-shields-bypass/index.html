@@ -15,10 +15,11 @@
 
   <div class="card">
     <h2>What this tests</h2>
-    <p>A page can move a WebSocket connection into a <code>SharedWorker</code> to
-    bypass Brave Shields network filtering. The same WebSocket endpoint is opened
-    three ways: directly from the <b>page</b>, from a <b>dedicated worker</b>, and
-    from a <b>shared worker</b>. All three target the same same-origin endpoint
+    <p>A page can move a WebSocket connection into a <code>SharedWorker</code> or
+    <code>ServiceWorker</code> to bypass Brave Shields network filtering. The same
+    WebSocket endpoint is opened four ways: directly from the <b>page</b>, from a
+    <b>dedicated worker</b>, from a <b>shared worker</b>, and from a
+    <b>service worker</b>. All four target the same same-origin endpoint
     <code id="ws-endpoint"></code>.</p>
   </div>
 
@@ -29,8 +30,8 @@
     blocks this origin's WebSocket endpoint, then reload:</p>
     <pre><code>||test-website-a.pages.dev/shared-worker-shields-bypass/socket</code></pre>
     <p>Expected with the filter active: <b>page</b> and <b>dedicated-worker</b>
-    show <span class="blocked">BLOCKED</span>, while
-    <b>shared-worker</b> shows <span class="ok">OPEN</span> (bypass).</p>
+    show <span class="blocked">BLOCKED</span>, while <b>shared-worker</b> and
+    <b>service-worker</b> show <span class="ok">OPEN</span> (bypass).</p>
   </div>
 
   <div class="card">
@@ -40,6 +41,7 @@
       <tr><td>page</td><td id="r-page" class="pending">testing…</td></tr>
       <tr><td>dedicated-worker</td><td id="r-dedicated" class="pending">testing…</td></tr>
       <tr><td>shared-worker</td><td id="r-shared" class="pending">testing…</td></tr>
+      <tr><td>service-worker</td><td id="r-service" class="pending">testing…</td></tr>
     </table>
     <p class="verdict" id="verdict"></p>
     <p><button id="rerun">Re-run</button></p>
@@ -115,41 +117,78 @@
       });
     }
 
+    async function testService(ctx) {
+      if (!('serviceWorker' in navigator)) return 'BLOCKED';
+      let reg;
+      let settled = false;
+      const done = (s) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { reg && reg.unregister(); } catch (e) {}
+        resolveFn(s);
+      };
+      let resolveFn;
+      const result = new Promise((r) => { resolveFn = r; });
+      const timer = setTimeout(() => done('TIMEOUT'), TIMEOUT_MS + 1500);
+      try {
+        reg = await navigator.serviceWorker.register(
+          '/shared-worker-shields-bypass/service-worker.js');
+        await navigator.serviceWorker.ready;
+        const worker = reg.active || (await navigator.serviceWorker.ready).active;
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (e) => done(e.data.status);
+        worker.postMessage({ wsBase: WS_BASE, ctx }, [channel.port2]);
+      } catch (e) { done('BLOCKED'); }
+      return result;
+    }
+
     async function run() {
-      for (const id of ['r-page', 'r-dedicated', 'r-shared']) {
+      for (const id of ['r-page', 'r-dedicated', 'r-shared', 'r-service']) {
         const cell = document.getElementById(id);
         cell.textContent = 'testing…';
         cell.className = 'pending';
       }
       document.getElementById('verdict').textContent = '';
 
-      const [page, dedicated, shared] = await Promise.all([
+      const [page, dedicated, shared, service] = await Promise.all([
         testPage('page'),
         testDedicated('dedicated'),
         testShared('shared'),
+        testService('service'),
       ]);
 
       setResult('r-page', page);
       setResult('r-dedicated', dedicated);
       setResult('r-shared', shared);
+      setResult('r-service', service);
 
+      // Frameless workers (shared + service) take the bypass path; framed
+      // initiators (page + dedicated) go through Brave's WebSocket proxy.
+      const framed = [page, dedicated];
+      const frameless = [shared, service];
       const verdict = document.getElementById('verdict');
-      if (page === 'BLOCKED' && dedicated === 'BLOCKED' && shared === 'OPEN') {
+      if (framed.every((s) => s === 'BLOCKED') && frameless.some((s) => s === 'OPEN')) {
+        const open = [];
+        if (shared === 'OPEN') open.push('shared-worker');
+        if (service === 'OPEN') open.push('service-worker');
         verdict.textContent =
-          'BYPASS: the SharedWorker WebSocket connected while the page and dedicated-worker sockets to the same endpoint were blocked.';
+          'BYPASS: ' + open.join(' and ') + ' connected while the page and ' +
+          'dedicated-worker sockets to the same endpoint were blocked.';
         verdict.className = 'verdict blocked';
-      } else if (page === 'OPEN' && dedicated === 'OPEN' && shared === 'OPEN') {
+      } else if ([page, dedicated, shared, service].every((s) => s === 'OPEN')) {
         verdict.textContent =
           'No filter active (all initiators connected). Add the custom filter above and re-run to see the bypass.';
         verdict.className = 'verdict';
-      } else if (page === 'BLOCKED' && dedicated === 'BLOCKED' && shared === 'BLOCKED') {
+      } else if ([page, dedicated, shared, service].every((s) => s === 'BLOCKED')) {
         verdict.textContent =
           'All initiators blocked consistently (expected correct behavior).';
         verdict.className = 'verdict ok';
       } else {
         verdict.textContent =
           'Inconclusive: unexpected mix of results (' +
-          'page=' + page + ', dedicated-worker=' + dedicated + ', shared-worker=' + shared +
+          'page=' + page + ', dedicated-worker=' + dedicated +
+          ', shared-worker=' + shared + ', service-worker=' + service +
           '). Re-run to retry.';
         verdict.className = 'verdict';
       }

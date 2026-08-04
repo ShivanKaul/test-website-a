@@ -1,5 +1,5 @@
 {
   "title": "SharedWorker WebSocket Shields Bypass",
-  "description": "Tests whether a WebSocket opened inside a SharedWorker bypasses Brave Shields network filtering. Brave only installs its WebSocket proxy when Chromium supplies a non-null RenderFrameHost, so a frameless SharedWorker socket skips BraveProxyingWebSocket and the adblock engines. The same endpoint is opened from the page, a dedicated worker, and a shared worker; with a matching custom filter, the page and dedicated worker are blocked while the shared worker connects.",
+  "description": "Tests whether a WebSocket opened inside a frameless worker (SharedWorker or ServiceWorker) bypasses Brave Shields network filtering. Brave only intercepts WebSockets when Chromium supplies a non-null RenderFrameHost, so a frameless worker socket skips BraveProxyingWebSocket and the adblock engines. The same endpoint is opened from the page, a dedicated worker, a shared worker, and a service worker; with a matching custom filter, the page and dedicated worker are blocked while the shared and service workers connect.",
   "added": "2026-08-04"
 }
