@@ -1,0 +1,5 @@
+{
+  "title": "Third-Party Iframe Cache Storage Clearing",
+  "description": "Tests whether 'Forget me when I close this site' clears the Cache Storage API (window.caches) written by a cross-site iframe after the site is closed.",
+  "added": "2026-08-05"
+}

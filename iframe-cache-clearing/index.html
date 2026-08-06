@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Third-party iframe Cache Storage clearing test</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .id { font-family: var(--font-mono); font-weight: bold; }
+    #trackingId { font-size: 1.1em; }
+    iframe { width: 100%; height: 150px; border: 1px solid var(--line); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <a class="home-link" href="/">← All tests</a>
+  <h1>Third-party iframe Cache Storage clearing test</h1>
+
+  <section class="card">
+    <h2>What this tests</h2>
+    <p>
+      This page embeds a cross-site iframe from another origin. The iframe
+      writes a persistent tracking id into its own Cache Storage
+      (<code>window.caches</code>) and reads it back. Cache Storage is
+      origin-scoped and disk-backed, so a third-party frame can use it to
+      re-identify a visitor across sessions, exactly like a third-party cookie.
+    </p>
+    <p>
+      Brave's "Forget me when I close this site" (Forgetful Browsing) shield is
+      supposed to purge <em>all</em> storage tied to the embedding first-party
+      site once its last tab is closed, including partitioned third-party
+      storage. This checks whether the iframe's Cache Storage is included in
+      that purge.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>How to run it</h2>
+    <ol>
+      <li>Open Brave's Shields panel for this site and enable
+        <strong>"Forget me when I close this site"</strong>. Reload the page.</li>
+      <li>Click <strong>Set tracking id</strong> to have the iframe write a
+        fresh id into its Cache Storage.</li>
+      <li>Click <strong>Get tracking id</strong> to confirm the iframe reads it
+        back.</li>
+      <li>Close every tab open to this first-party origin (and optionally quit
+        Brave). Wait at least 30 seconds.</li>
+      <li>Reopen the browser, return to this page, and click
+        <strong>Get tracking id</strong> without setting one first.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Expected behavior</h2>
+    <ul>
+      <li>
+        <strong>With Forgetful Browsing on:</strong> after closing the site the
+        id should be gone. Getting the id should report
+        <span class="ok">no id</span>. If the <em>same</em> id comes back, the
+        iframe's Cache Storage survived the close and the shield failed to clear
+        third-party storage &ndash; a cross-session tracking leak.
+      </li>
+      <li>
+        <strong>With the shield off:</strong> the id is expected to persist.
+        This confirms the test actually persists third-party state.
+      </li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Run</h2>
+    <p>First-party origin: <code id="topOrigin"></code></p>
+    <p>Third-party iframe origin: <code id="childOrigin"></code></p>
+
+    <p>
+      <button id="setBtn">Set tracking id</button>
+      <button id="getBtn">Get tracking id</button>
+      <button id="clearBtn">Clear tracking id</button>
+    </p>
+
+    <p>Tracking id: <span class="id" id="trackingId">&mdash;</span></p>
+    <p class="status" id="status"></p>
+    <p class="verdict" id="verdict"></p>
+  </section>
+
+  <section class="card">
+    <h2>Third-party frame</h2>
+    <iframe id="child"></iframe>
+  </section>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const childOrigin = new URL(
+      params.get('childOrigin') || 'https://test-website-b.pages.dev'
+    ).origin;
+
+    const $ = (id) => document.getElementById(id);
+    $('topOrigin').textContent = location.origin;
+    $('childOrigin').textContent = childOrigin;
+
+    const frame = $('child');
+    const frameReady = new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+    });
+
+    const frameUrl = new URL('/iframe-cache-clearing/frame.html', childOrigin);
+    frameUrl.searchParams.set('parentOrigin', location.origin);
+    frame.src = frameUrl.href;
+
+    function setStatus(msg) { $('status').textContent = msg; }
+
+    function setVerdict(text, cls) {
+      const v = $('verdict');
+      v.textContent = text;
+      v.className = 'verdict ' + (cls || '');
+    }
+
+    async function callFrame(cmd) {
+      await frameReady;
+      const id = crypto.randomUUID();
+
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', onMessage);
+          reject(new Error('Timed out waiting for ' + cmd));
+        }, 12000);
+
+        function onMessage(event) {
+          if (event.origin !== childOrigin) return;
+          if (!event.data || event.data.id !== id) return;
+          clearTimeout(timeout);
+          window.removeEventListener('message', onMessage);
+          if (event.data.ok) resolve(event.data.result);
+          else reject(new Error(event.data.error || ('Frame command failed: ' + cmd)));
+        }
+
+        window.addEventListener('message', onMessage);
+        frame.contentWindow.postMessage({ id, cmd }, childOrigin);
+      });
+    }
+
+    async function setId() {
+      const result = await callFrame('set');
+      if (!result.supported) {
+        setStatus('Cache Storage API is not available in the iframe.');
+        return;
+      }
+      $('trackingId').textContent = result.id;
+      setStatus('Iframe wrote a fresh tracking id into its Cache Storage.');
+      setVerdict('');
+    }
+
+    async function getId() {
+      const result = await callFrame('get');
+      if (!result.supported) {
+        setStatus('Cache Storage API is not available in the iframe.');
+        return;
+      }
+      if (result.id) {
+        $('trackingId').textContent = result.id;
+        setStatus('Iframe read the tracking id back from its Cache Storage.');
+        setVerdict(
+          'Tracking id is present. If you set it in a previous session and it ' +
+          'persisted after closing this site with Forgetful Browsing on, that ' +
+          'is a third-party clearing failure.',
+          'leak'
+        );
+      } else {
+        $('trackingId').textContent = '—';
+        setStatus('No tracking id found in the iframe\'s Cache Storage.');
+        setVerdict('No id present. The iframe\'s Cache Storage is empty for this origin.', 'ok');
+      }
+    }
+
+    async function clearId() {
+      await callFrame('clear');
+      $('trackingId').textContent = '—';
+      setStatus('Asked the iframe to delete its cache.');
+      setVerdict('');
+    }
+
+    function guard(fn) {
+      return async () => {
+        try {
+          await fn();
+        } catch (err) {
+          setStatus('Error: ' + err.message);
+        }
+      };
+    }
+
+    $('setBtn').onclick = guard(setId);
+    $('getBtn').onclick = guard(getId);
+    $('clearBtn').onclick = guard(clearId);
+
+    // Show current state on load without writing anything.
+    guard(getId)();
+  </script>
+</body>
+</html>
