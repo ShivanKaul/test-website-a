@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Service Worker Shields-Down Over-Blocking</title>
+  <style>
+    #results td:last-child { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Service Worker Shields-Down Over-Blocking</h1>
+
+  <div class="card">
+    <p>With Shields <b>down</b> for a site, requests from a service worker must
+    not be blocked. A tracker on Brave's default lists is requested from the
+    <b>page</b> and from a <b>service worker</b>, via <code>fetch()</code>
+    (<a href="https://github.com/brave/brave-browser/issues/34107">#34107</a>)
+    and <code>importScripts()</code>
+    (<a href="https://github.com/brave/brave-browser/issues/35461">#35461</a>).</p>
+    <p><b>Turn Shields off, then Re-run.</b> Fixed: all
+    <span class="ok">ALLOWED</span>. Bug: a service-worker row
+    <span class="bad">BLOCKED</span> while its page row is
+    <span class="ok">ALLOWED</span>. Shields up: all
+    <span class="bad">BLOCKED</span>.</p>
+  </div>
+
+  <div class="card">
+    <table id="results">
+      <tr><th>Request</th><th>Initiator</th><th>Result</th></tr>
+      <tr><td>fetch()</td><td>page</td><td id="r-fetch-page" class="muted">…</td></tr>
+      <tr><td>fetch()</td><td>service-worker</td><td id="r-fetch-sw" class="muted">…</td></tr>
+      <tr><td>importScripts()</td><td>page</td><td id="r-import-page" class="muted">…</td></tr>
+      <tr><td>importScripts()</td><td>service-worker</td><td id="r-import-sw" class="muted">…</td></tr>
+    </table>
+    <p class="verdict" id="verdict"></p>
+    <p><button id="rerun">Re-run</button></p>
+  </div>
+
+  <script>
+    const FETCH_URL = 'https://cdn.taboola.com/libtrc/unip/1/tfa.js';
+    const IMPORT_URL = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js';
+    const TIMEOUT_MS = 6000;
+    const cb = () => 'cb=' + Date.now();
+
+    function setResult(id, status) {
+      const cell = document.getElementById(id);
+      cell.textContent = status;
+      cell.className = status === 'ALLOWED' ? 'ok' : 'bad';
+    }
+
+    function fetchFromPage() {
+      return fetch(FETCH_URL + '?' + cb(), { cache: 'no-store', mode: 'no-cors' })
+        .then(() => 'ALLOWED')
+        .catch(() => 'BLOCKED');
+    }
+
+    function importFromPage() {
+      return new Promise((resolve) => {
+        const s = document.createElement('script');
+        let settled = false;
+        const done = (r) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          s.remove();
+          resolve(r);
+        };
+        const timer = setTimeout(() => done('BLOCKED'), TIMEOUT_MS);
+        s.onload = () => done('ALLOWED');
+        s.onerror = () => done('BLOCKED');
+        s.src = IMPORT_URL + '?' + cb();
+        document.head.appendChild(s);
+      });
+    }
+
+    let swReg;
+    async function ensureWorker() {
+      if (!('serviceWorker' in navigator)) return null;
+      swReg = await navigator.serviceWorker.register('./service-worker.js');
+      await navigator.serviceWorker.ready;
+      return swReg.active || (await navigator.serviceWorker.ready).active;
+    }
+
+    function askWorker(worker, method, url) {
+      return new Promise((resolve) => {
+        let settled = false;
+        const done = (r) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(r);
+        };
+        const timer = setTimeout(() => done('TIMEOUT'), TIMEOUT_MS + 1500);
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (e) => done(e.data.status);
+        worker.postMessage({ method, url }, [channel.port2]);
+      });
+    }
+
+    async function run() {
+      for (const id of ['r-fetch-page', 'r-fetch-sw', 'r-import-page', 'r-import-sw']) {
+        const cell = document.getElementById(id);
+        cell.textContent = '…';
+        cell.className = 'muted';
+      }
+      document.getElementById('verdict').textContent = '';
+
+      const [fetchPage, importPage, worker] = await Promise.all([
+        fetchFromPage(),
+        importFromPage(),
+        ensureWorker(),
+      ]);
+      setResult('r-fetch-page', fetchPage);
+      setResult('r-import-page', importPage);
+
+      let fetchSw = 'BLOCKED';
+      let importSw = 'BLOCKED';
+      if (worker) {
+        [fetchSw, importSw] = await Promise.all([
+          askWorker(worker, 'fetch', FETCH_URL),
+          askWorker(worker, 'importScripts', IMPORT_URL),
+        ]);
+      }
+      setResult('r-fetch-sw', fetchSw);
+      setResult('r-import-sw', importSw);
+
+      const verdict = document.getElementById('verdict');
+      const all = [fetchPage, importPage, fetchSw, importSw];
+      const bugFetch = fetchPage === 'ALLOWED' && fetchSw === 'BLOCKED';
+      const bugImport = importPage === 'ALLOWED' && importSw === 'BLOCKED';
+      if (bugFetch || bugImport) {
+        const which = [];
+        if (bugFetch) which.push('fetch()');
+        if (bugImport) which.push('importScripts()');
+        verdict.textContent = 'BUG: service-worker ' + which.join(' and ') +
+          ' blocked while the page was allowed.';
+        verdict.className = 'verdict bad';
+      } else if (all.every((s) => s === 'ALLOWED')) {
+        verdict.textContent = 'All allowed (fixed, Shields down).';
+        verdict.className = 'verdict ok';
+      } else if (all.every((s) => s === 'BLOCKED')) {
+        verdict.textContent = 'All blocked (Shields up). Turn Shields off and re-run.';
+        verdict.className = 'verdict';
+      } else {
+        verdict.textContent = 'Inconclusive: fetch page=' + fetchPage + ' sw=' + fetchSw +
+          ', importScripts page=' + importPage + ' sw=' + importSw + '. Re-run.';
+        verdict.className = 'verdict';
+      }
+    }
+
+    document.getElementById('rerun').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>
