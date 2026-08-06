@@ -7,23 +7,21 @@
   </style>
 </head>
 <body>
-  <h1>Service Worker Shields-Down Over-Blocking</h1>
+  <h1>Service Worker Request Over-Blocking</h1>
 
+  <h2>1. Shields down for the site
+    (<a href="https://github.com/brave/brave-browser/issues/34107">#34107</a>,
+    <a href="https://github.com/brave/brave-browser/issues/35461">#35461</a>)</h2>
   <div class="card">
-    <p>With Shields <b>down</b> for a site, requests from a service worker must
-    not be blocked. A tracker on Brave's default lists is requested from the
+    <p>With Shields <b>down</b>, requests from a service worker must not be
+    blocked. A tracker on Brave's default lists is requested from the
     <b>page</b> and from a <b>service worker</b>, via <code>fetch()</code>
-    (<a href="https://github.com/brave/brave-browser/issues/34107">#34107</a>)
-    and <code>importScripts()</code>
-    (<a href="https://github.com/brave/brave-browser/issues/35461">#35461</a>).</p>
+    and <code>importScripts()</code>.</p>
     <p><b>Turn Shields off, then Re-run.</b> Fixed: all
     <span class="ok">ALLOWED</span>. Bug: a service-worker row
     <span class="bad">BLOCKED</span> while its page row is
     <span class="ok">ALLOWED</span>. Shields up: all
     <span class="bad">BLOCKED</span>.</p>
-  </div>
-
-  <div class="card">
     <table id="results">
       <tr><th>Request</th><th>Initiator</th><th>Result</th></tr>
       <tr><td>fetch()</td><td>page</td><td id="r-fetch-page" class="muted">…</td></tr>
@@ -32,14 +30,38 @@
       <tr><td>importScripts()</td><td>service-worker</td><td id="r-import-sw" class="muted">…</td></tr>
     </table>
     <p class="verdict" id="verdict"></p>
-    <p><button id="rerun">Re-run</button></p>
   </div>
+
+  <h2>2. Cross-origin re-issue from a fetch handler
+    (<a href="https://github.com/brave/brave-browser/issues/25855">#25855</a>)</h2>
+  <div class="card">
+    <p>A service-worker <code>fetch</code> handler intercepts the page's
+    cross-origin request to <code id="b-origin"></code> and re-issues it.
+    Passing the <b>Request object</b> (<code>fetch(event.request)</code>) is the
+    reported failure; passing only the <b>URL</b>
+    (<code>fetch(request.url)</code>) is the reported workaround.
+    <b>Shields state does not matter.</b></p>
+    <p>Fixed: both <span class="ok">ALLOWED</span>. Bug:
+    <code>fetch(event.request)</code> is <span class="bad">BLOCKED</span>
+    while <code>fetch(request.url)</code> is <span class="ok">ALLOWED</span>.</p>
+    <table id="results2">
+      <tr><th>Re-issued as</th><th>Result</th></tr>
+      <tr><td>fetch(event.request)</td><td id="r-reissue-request" class="muted">…</td></tr>
+      <tr><td>fetch(request.url)</td><td id="r-reissue-url" class="muted">…</td></tr>
+    </table>
+    <p class="verdict" id="verdict2"></p>
+  </div>
+
+  <p><button id="rerun">Re-run</button></p>
 
   <script>
     const FETCH_URL = 'https://cdn.taboola.com/libtrc/unip/1/tfa.js';
     const IMPORT_URL = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js';
+    const B_ORIGIN = 'https://test-website-b.pages.dev';
+    const CORS_URL = B_ORIGIN + '/service-worker-shields-down/cors-echo';
     const TIMEOUT_MS = 6000;
     const cb = () => 'cb=' + Date.now();
+    document.getElementById('b-origin').textContent = B_ORIGIN;
 
     function setResult(id, status) {
       const cell = document.getElementById(id);
@@ -96,13 +118,22 @@
       });
     }
 
+    // The active SW's fetch handler intercepts these and re-issues them.
+    function reissue(swmode) {
+      return fetch(CORS_URL + '?swmode=' + swmode + '&' + cb(), { method: 'POST', mode: 'cors' })
+        .then((r) => r.ok ? 'ALLOWED' : 'BLOCKED')
+        .catch(() => 'BLOCKED');
+    }
+
     async function run() {
-      for (const id of ['r-fetch-page', 'r-fetch-sw', 'r-import-page', 'r-import-sw']) {
+      for (const id of ['r-fetch-page', 'r-fetch-sw', 'r-import-page', 'r-import-sw',
+                        'r-reissue-request', 'r-reissue-url']) {
         const cell = document.getElementById(id);
         cell.textContent = '…';
         cell.className = 'muted';
       }
       document.getElementById('verdict').textContent = '';
+      document.getElementById('verdict2').textContent = '';
 
       const [fetchPage, importPage, worker] = await Promise.all([
         fetchFromPage(),
@@ -144,6 +175,31 @@
         verdict.textContent = 'Inconclusive: fetch page=' + fetchPage + ' sw=' + fetchSw +
           ', importScripts page=' + importPage + ' sw=' + importSw + '. Re-run.';
         verdict.className = 'verdict';
+      }
+
+      // Section 2 (#25855): the fetch handler only fires once the SW controls
+      // this page. On the very first load that may not be true yet; Re-run then.
+      const verdict2 = document.getElementById('verdict2');
+      if (!navigator.serviceWorker.controller) {
+        setResult('r-reissue-request', 'N/A');
+        setResult('r-reissue-url', 'N/A');
+        verdict2.textContent = 'Service worker not controlling yet. Click Re-run.';
+        verdict2.className = 'verdict';
+      } else {
+        const [rr, ru] = [await reissue('reissue-request'), await reissue('reissue-url')];
+        setResult('r-reissue-request', rr);
+        setResult('r-reissue-url', ru);
+        if (rr === 'BLOCKED' && ru === 'ALLOWED') {
+          verdict2.textContent = 'BUG: fetch(event.request) blocked; fetch(request.url) allowed.';
+          verdict2.className = 'verdict bad';
+        } else if (rr === 'ALLOWED' && ru === 'ALLOWED') {
+          verdict2.textContent = 'Both allowed (fixed).';
+          verdict2.className = 'verdict ok';
+        } else {
+          verdict2.textContent = 'Inconclusive: fetch(event.request)=' + rr +
+            ', fetch(request.url)=' + ru + '. Re-run.';
+          verdict2.className = 'verdict';
+        }
       }
     }
 

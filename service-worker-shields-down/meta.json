@@ -1,5 +1,5 @@
 {
-  "title": "Service Worker Shields-Down Over-Blocking",
-  "description": "Tests whether service-worker requests are wrongly blocked when Shields are down for a site. A tracker URL on Brave's default lists is requested from the page and from a service worker, via fetch() (brave-browser#34107) and via importScripts() (brave-browser#35461). With Shields down, a buggy build blocks the worker request because it loses tab_origin, while the same page request is allowed; when fixed, all four are allowed. With Shields up, all are correctly blocked.",
+  "title": "Service Worker Request Over-Blocking",
+  "description": "Tests service-worker requests wrongly blocked by Brave. Section 1: with Shields down, a tracker is requested from the page and a service worker via fetch() (brave-browser#34107) and importScripts() (brave-browser#35461); a buggy build blocks the worker request (lost tab_origin) while the page request is allowed. Section 2: a service-worker fetch handler intercepts a cross-origin request to test-website-b and re-issues it; fetch(event.request) is blocked while fetch(request.url) works, regardless of Shields (brave-browser#25855).",
   "added": "2026-08-06"
 }
