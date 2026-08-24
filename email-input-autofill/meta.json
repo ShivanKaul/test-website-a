@@ -1,0 +1,5 @@
+{
+  "title": "Email Input Autofill",
+  "description": "A bare page holding a single required input with type=\"email\", a placeholder, and autocomplete=\"email\", for exercising browser autofill on the simplest possible form.",
+  "added": "2026-08-24"
+}
