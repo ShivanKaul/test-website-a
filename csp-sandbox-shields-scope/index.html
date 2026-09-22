@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>CSP Sandbox Shields Scope</title>
+  <style>
+    ol { margin: 8px 0 0 22px; }
+  </style>
+</head>
+<body>
+  <h1>Shields scope on a CSP-sandboxed page</h1>
+
+  <div class="card">
+    <p>A response served with <code>Content-Security-Policy: sandbox allow-scripts</code>
+    gets an <b>opaque origin</b>, so there is no site for Shields to scope a per-site
+    exception to. The reported bug is that the Shields panel writes the toggle into the
+    <b>global</b> defaults instead, so switching <b>Block scripts</b> off on one
+    sandboxed page switches scripts on for every site, without saying so.</p>
+    <p><a href="/csp-sandbox-shields-scope/sandboxed">Open the sandboxed page</a>
+    (<a href="/csp-sandbox-shields-scope/sandboxed?csp=off">control: same page, no CSP header</a>).</p>
+  </div>
+
+  <h2>Script state on this origin</h2>
+  <div class="card">
+    <p>Shields was never touched for <code id="host">this origin</code>, so this
+    reading follows the global <b>Block Scripts</b> default.</p>
+    <p class="verdict bad" id="verdict">Scripts BLOCKED here.</p>
+  </div>
+
+  <h2>Steps</h2>
+  <div class="card">
+    <ol>
+      <li>Open <code>brave://settings/shields</code> and turn the global
+      <b>Block Scripts</b> default <b>on</b>.</li>
+      <li>Reload this page. It should read <span class="bad">BLOCKED</span>. If it does
+      not, clear any leftover site exception from the Shields panel first.</li>
+      <li>Open the <a href="/csp-sandbox-shields-scope/sandboxed">sandboxed page</a>
+      and follow the steps there: turn <b>Block scripts</b> off in its Shields panel.</li>
+      <li>Reload this page.</li>
+    </ol>
+    <p>Fixed: still <span class="bad">BLOCKED</span>, and
+    <code>brave://settings/shields</code> still shows <b>Block Scripts</b> on. The
+    sandboxed page gets an exception of its own, or none at all.</p>
+    <p>Bug: now <span class="ok">ALLOWED</span>, and
+    <code>brave://settings/shields</code> shows <b>Block Scripts</b> off. A single
+    sandboxed page changed the default for every site.</p>
+    <p class="small muted">The sandboxed page has no <code>allow-top-navigation</code>,
+    so its links do nothing; use the back button. Restore the global default when
+    you are done.</p>
+  </div>
+
+  <script>
+    document.getElementById('host').textContent = location.host;
+    const verdict = document.getElementById('verdict');
+    verdict.textContent = 'Scripts ALLOWED here.';
+    verdict.className = 'verdict ok';
+  </script>
+</body>
+</html>
