@@ -1,5 +1,5 @@
 {
   "title": "CSP Sandbox Shields Scope",
-  "description": "Tests whether flipping a Shields toggle on a page served with Content-Security-Policy: sandbox allow-scripts edits the global Shields defaults instead of creating a per-site exception. The sandboxed document has an opaque origin, so there is no site to scope an exception to; turning off \"Block scripts\" there reportedly turns scripts back on for every site.",
+  "description": "Tests whether flipping a Shields toggle on a page served with Content-Security-Policy: sandbox allow-scripts edits the global Shields defaults instead of creating a per-site exception. The sandboxed document has an opaque origin, so there is no site to scope an exception to.",
   "added": "2026-09-22"
 }

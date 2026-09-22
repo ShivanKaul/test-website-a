@@ -1,13 +1,5 @@
-// Serves a page carrying "Content-Security-Policy: sandbox allow-scripts", which
-// gives the top-level document an opaque origin (window.origin === "null") while
-// still letting its scripts run.
-//
-// Shields has no site to attach a per-site exception to on an opaque origin. The
-// reported bug is that toggling "Block scripts" here writes to the global Shields
-// defaults instead, so one sandboxed page can re-enable scripts for every site.
-//
-//   default    served WITH `Content-Security-Policy: sandbox allow-scripts`
-//   ?csp=off   served WITHOUT the header (control: an ordinary same-origin page)
+// CSP sandbox only applies as an HTTP header, so this page cannot be a static file.
+// ?csp=off serves it without the header as a control.
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const withSandbox = url.searchParams.get('csp') !== 'off';
@@ -28,23 +20,18 @@ export async function onRequestGet(context) {
     <table>
       <tr><th>Document origin</th><td id="origin" class="muted">unknown (scripts are blocked here)</td></tr>
     </table>
-    <p class="small muted">A sandboxed document reports <code>null</code>; an
-    ordinary one reports <code>${url.origin}</code>. <code>allow-scripts</code>
-    is what keeps scripts running, so a blocked reading above means Shields is
-    currently blocking scripts.</p>
+    <p class="small muted">Sandboxed: <code>null</code>. Ordinary:
+    <code>${url.origin}</code>. A blocked reading means Shields is blocking scripts.</p>
   </div>
 
   <div class="card">
     <h2>Do this here</h2>
     <ol>
-      <li>Open the Brave Shields panel for this page.</li>
-      <li>Turn <b>Block scripts</b> off.</li>
-      <li>Open <code>brave://settings/shields</code> and reload it. Check whether the
-      global <b>Block Scripts</b> default is still on.</li>
-      <li>Go back to the harness and reload it.</li>
+      <li>Shields panel for this page: turn <b>Block scripts</b> off.</li>
+      <li>Reload <code>brave://settings/shields</code>: is the global
+      <b>Block Scripts</b> default still on?</li>
+      <li>Back button, then reload the harness.</li>
     </ol>
-    <p>CSP <code>sandbox</code> only applies as an HTTP header, so this page cannot
-    be a static file; it is served by a Pages Function.</p>
   </div>
 
   <script>
