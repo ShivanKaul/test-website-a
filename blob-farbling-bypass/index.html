@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Blob URL Farbling Bypass</title>
+  <style>
+    td.val { font-family: var(--font-mono); font-size: 0.85em; }
+    td.none { color: var(--muted); font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>Farbling in a blob: page</h1>
+
+  <div class="card">
+    <p>A page opened from a <code>blob:</code> URL can report the device's real
+    fingerprinting values instead of the randomized ones its creator sees. It is
+    same-origin with its creator, so it writes what it read to
+    <code>localStorage</code>, closes itself, and this page reads it back.
+    Matching values are correct.</p>
+    <p class="small muted">Shields up, fingerprinting protection on.</p>
+    <button onclick="run()">Run</button>
+    <p id="status" class="status"></p>
+    <table id="resultsTable" style="display:none;">
+      <thead>
+        <tr><th>Surface</th><th>This page</th><th><code>blob:</code></th></tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+    <p id="verdict"></p>
+    <p class="small muted" id="footnote" style="display:none;">* Screen values
+    track each window's own size, so they differ between windows either way.
+    Shown for reference; they do not count toward the verdict.</p>
+  </div>
+
+  <script>
+    async function probeSurfaces() {
+      const out = {};
+
+      out.hardwareConcurrency = String(navigator.hardwareConcurrency);
+      out.deviceMemory = String(
+        navigator.deviceMemory === undefined ? 'N/A' : navigator.deviceMemory);
+      out.plugins = String(navigator.plugins.length);
+      out['navigator.languages'] = (navigator.languages || []).join(',');
+      out['screen.width'] = String(screen.width);
+      out['screen.height'] = String(screen.height);
+      out['screen.availWidth'] = String(screen.availWidth);
+      out['screen.availHeight'] = String(screen.availHeight);
+
+      try {
+        const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        const ac = new AC(1, 5000, 44100);
+        const osc = ac.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = 10000;
+        osc.connect(ac.destination);
+        osc.start(0);
+        const data = (await ac.startRendering()).getChannelData(0);
+        let sum = 0;
+        for (let i = 4500; i < 5000; i++) {
+          sum += Math.abs(data[i]);
+        }
+        out.audio = sum.toFixed(10);
+      } catch (e) {
+        out.audio = 'error: ' + e.message;
+      }
+
+      return out;
+    }
+
+    const ORDER = ['hardwareConcurrency', 'deviceMemory', 'plugins',
+                   'navigator.languages', 'audio', 'screen.width',
+                   'screen.height', 'screen.availWidth', 'screen.availHeight'];
+
+    const INFO = new Set(['screen.width', 'screen.height', 'screen.availWidth',
+                          'screen.availHeight']);
+
+    const KEY = 'blob_probe';
+
+    function blobHtml() {
+      return '<!doctype html><html><head><title>blob probe<\/title><\/head>'
+        + '<body><p>Probing.<\/p><script>' + probeSurfaces.toString() + ';'
+        + 'probeSurfaces().then(function (v) {'
+        + 'localStorage.setItem("' + KEY + '", JSON.stringify(v));'
+        + 'window.close(); });'
+        + '<\/script><\/body><\/html>';
+    }
+
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
+
+    function run() {
+      localStorage.removeItem(KEY);
+      const url = URL.createObjectURL(
+        new Blob([blobHtml()], { type: 'text/html' }));
+      const w = window.open(url, '_blank');
+      if (!w) {
+        URL.revokeObjectURL(url);
+        setStatus('The popup did not open. Click the button directly and retry.');
+        return;
+      }
+      setStatus('Reading the blob: page...');
+      const mine = probeSurfaces();
+      let tries = 0;
+      const poller = setInterval(function () {
+        tries++;
+        const raw = localStorage.getItem(KEY);
+        if (raw) {
+          clearInterval(poller);
+          URL.revokeObjectURL(url);
+          try { w.close(); } catch (e) {}
+          mine.then(function (m) {
+            setStatus('Done.');
+            render(m, JSON.parse(raw));
+          });
+        } else if (tries > 100) {
+          clearInterval(poller);
+          URL.revokeObjectURL(url);
+          setStatus('Timed out waiting for the blob: page.');
+        }
+      }, 100);
+    }
+
+    function cell(tr, cls, text) {
+      const td = document.createElement('td');
+      td.className = cls;
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+
+    function render(mine, theirs) {
+      const tbody = document.getElementById('results');
+      tbody.innerHTML = '';
+      let differs = false;
+
+      ORDER.forEach(function (key) {
+        const a = String(mine[key]);
+        const b = String(theirs[key]);
+        const tr = document.createElement('tr');
+        cell(tr, '', INFO.has(key) ? key + ' *' : key);
+        cell(tr, 'val', a);
+        if (INFO.has(key)) {
+          cell(tr, 'val', b);
+        } else {
+          const same = a === b;
+          if (!same) {
+            differs = true;
+          }
+          cell(tr, 'val ' + (same ? 'match' : 'mismatch'), b);
+        }
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('resultsTable').style.display = '';
+      document.getElementById('footnote').style.display = '';
+      const el = document.getElementById('verdict');
+      el.textContent = differs
+        ? 'blob: page returned real values.'
+        : 'blob: page farbled like this page.';
+      el.className = differs ? 'verdict bad' : 'verdict ok';
+    }
+  </script>
+</body>
+</html>

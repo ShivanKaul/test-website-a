@@ -1,0 +1,5 @@
+{
+  "title": "Blob URL Farbling Bypass",
+  "description": "Tests whether Brave's fingerprinting farbling applies to a page opened from a blob: URL. With Shields up and fingerprinting protection on, nine surfaces are read in this page and in the blob: page, which is same-origin with its creator and so hands its readings back through localStorage before closing itself. The blob: page reports the device's real values while this page reports randomized ones.",
+  "added": "2026-06-02"
+}
