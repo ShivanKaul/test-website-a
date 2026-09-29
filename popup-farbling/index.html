@@ -37,41 +37,13 @@
     <p id="verdictBlank"></p>
     <p id="verdictBlob"></p>
     <p class="small muted" id="footnote" style="display:none;">* Screen values
-    track each window's own size, and canvas is keyed per document, so both
-    differ between windows either way. Shown for reference; they do not count
-    toward the verdict.</p>
+    track each window's own size, so they differ between windows either way.
+    Shown for reference; they do not count toward the verdict.</p>
   </div>
 
   <script>
     async function probeSurfaces() {
-      function hash(str) {
-        let h = 0x811c9dc5;
-        for (let i = 0; i < str.length; i++) {
-          h ^= str.charCodeAt(i);
-          h = (h * 0x01000193) >>> 0;
-        }
-        return h.toString(16).padStart(8, '0');
-      }
-
       const out = {};
-
-      try {
-        const c = document.createElement('canvas');
-        c.width = 220;
-        c.height = 40;
-        const ctx = c.getContext('2d');
-        ctx.textBaseline = 'top';
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#f60';
-        ctx.fillRect(0, 0, 110, 20);
-        ctx.fillStyle = '#069';
-        ctx.fillText('farbling probe ✈', 2, 2);
-        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-        ctx.fillText('farbling probe ✈', 4, 12);
-        out.canvas = hash(c.toDataURL());
-      } catch (e) {
-        out.canvas = 'error: ' + e.message;
-      }
 
       out.hardwareConcurrency = String(navigator.hardwareConcurrency);
       out.deviceMemory = String(
@@ -104,12 +76,12 @@
       return out;
     }
 
-    const ORDER = ['canvas', 'hardwareConcurrency', 'deviceMemory', 'plugins',
+    const ORDER = ['hardwareConcurrency', 'deviceMemory', 'plugins',
                    'audio', 'navigator.languages', 'screen.width',
                    'screen.height', 'screen.availWidth', 'screen.availHeight'];
 
-    const INFO = new Set(['canvas', 'screen.width', 'screen.height',
-                          'screen.availWidth', 'screen.availHeight']);
+    const INFO = new Set(['screen.width', 'screen.height', 'screen.availWidth',
+                          'screen.availHeight']);
 
     const state = { mine: null, blank: null, blob: null, control: false };
     const inbox = {};
