@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>about:blank Popup Farbling Bypass</title>
+  <style>
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    td.val { font-family: var(--font-mono); font-size: 0.88em; }
+  </style>
+</head>
+<body>
+  <h1>Farbling in an <code>about:blank</code> popup</h1>
+
+  <div class="card">
+    <p>A top-level popup from <code>window.open('')</code> commits in the
+    renderer, so it never receives Shields settings and farbling falls back to
+    <b>OFF</b>. An <code>about:blank</code> iframe inherits from its frame root
+    and is unaffected.</p>
+    <p class="small muted">Shields up, fingerprinting protection on, popups
+    allowed. <b>Test</b> probes inside the popup and should differ on a buggy
+    build. <b>Control</b> reads from this page first, which makes the popup
+    inherit these settings, and should match either way.</p>
+    <div class="btn-row">
+      <button onclick="run(false)">Test</button>
+      <button onclick="run(true)">Control</button>
+      <button onclick="inspect()">Inspect</button>
+    </div>
+    <p id="status" class="status"></p>
+    <table id="resultsTable" style="display:none;">
+      <thead>
+        <tr><th>Surface</th><th>This page</th><th>Popup</th><th></th></tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+    <p id="verdict"></p>
+  </div>
+
+  <script>
+    async function probeSurfaces() {
+      function hash(str) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = (h * 0x01000193) >>> 0;
+        }
+        return h.toString(16).padStart(8, '0');
+      }
+
+      const out = {};
+
+      try {
+        const c = document.createElement('canvas');
+        c.width = 220;
+        c.height = 40;
+        const ctx = c.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.font = '16px Arial';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(0, 0, 110, 20);
+        ctx.fillStyle = '#069';
+        ctx.fillText('farbling probe ✈', 2, 2);
+        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        ctx.fillText('farbling probe ✈', 4, 12);
+        out.canvas = hash(c.toDataURL());
+      } catch (e) {
+        out.canvas = 'error: ' + e.message;
+      }
+
+      out.hardwareConcurrency = String(navigator.hardwareConcurrency);
+      out.deviceMemory = String(
+        navigator.deviceMemory === undefined ? 'N/A' : navigator.deviceMemory);
+      out.plugins = String(navigator.plugins.length);
+      out['navigator.languages'] = (navigator.languages || []).join(',');
+
+      try {
+        const gl = document.createElement('canvas').getContext('webgl');
+        out.webgl = gl
+          ? hash((gl.getSupportedExtensions() || []).join(','))
+          : 'unavailable';
+      } catch (e) {
+        out.webgl = 'error: ' + e.message;
+      }
+
+      try {
+        const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        const ac = new AC(1, 5000, 44100);
+        const osc = ac.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = 10000;
+        osc.connect(ac.destination);
+        osc.start(0);
+        const data = (await ac.startRendering()).getChannelData(0);
+        let sum = 0;
+        for (let i = 4500; i < 5000; i++) {
+          sum += Math.abs(data[i]);
+        }
+        out.audio = sum.toFixed(10);
+      } catch (e) {
+        out.audio = 'error: ' + e.message;
+      }
+
+      return out;
+    }
+
+    const ORDER = ['canvas', 'hardwareConcurrency', 'deviceMemory', 'plugins',
+                   'audio', 'navigator.languages', 'webgl'];
+
+    let pending = null;
+    window.__receiveProbe = function (vals) {
+      if (pending) {
+        pending(vals);
+      }
+    };
+
+    function popupHtml(body) {
+      return '<!doctype html><html><head><title>about:blank probe<\/title><\/head>'
+        + '<body>' + body + '<script>' + probeSurfaces.toString() + ';'
+        + 'probeSurfaces().then(function (v) { window.opener.__receiveProbe(v); });'
+        + '<\/script><\/body><\/html>';
+    }
+
+    function run(control) {
+      const status = document.getElementById('status');
+
+      const w = window.open('');
+      if (!w) {
+        status.textContent = 'Popup blocked. Allow popups for this origin and retry.';
+        return;
+      }
+
+      if (control) {
+        void w.navigator.hardwareConcurrency;
+      }
+
+      status.textContent = control ? 'Running control...' : 'Running test...';
+
+      probeSurfaces().then(function (mine) {
+        return new Promise(function (resolve) {
+          const timer = setTimeout(function () { resolve(null); }, 5000);
+          pending = function (v) {
+            clearTimeout(timer);
+            resolve(v);
+          };
+          w.document.write(popupHtml('<p>Probing.<\/p>'));
+          w.document.close();
+        }).then(function (theirs) {
+          pending = null;
+          try { w.close(); } catch (e) {}
+          if (!theirs) {
+            status.textContent = 'Timed out waiting for the popup.';
+            return;
+          }
+          render(mine, theirs, control);
+        });
+      });
+    }
+
+    function render(mine, theirs, control) {
+      const tbody = document.getElementById('results');
+      tbody.innerHTML = '';
+      let differs = false;
+
+      ORDER.forEach(function (key) {
+        const a = String(mine[key]);
+        const b = String(theirs[key]);
+        const same = a === b;
+        if (!same) {
+          differs = true;
+        }
+        const tr = document.createElement('tr');
+        const cells = [
+          ['', key],
+          ['val', a],
+          ['val', b],
+          [same ? 'match' : 'mismatch', same ? 'same' : 'DIFFERENT'],
+        ];
+        cells.forEach(function (cell) {
+          const td = document.createElement('td');
+          td.className = cell[0];
+          td.textContent = cell[1];
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('resultsTable').style.display = '';
+      const verdict = document.getElementById('verdict');
+
+      if (control) {
+        verdict.textContent = differs
+          ? 'Control differed, expected a match. Check that protection is on.'
+          : 'Control matched, as expected.';
+        verdict.className = differs ? 'verdict warn' : 'verdict ok';
+      } else {
+        verdict.textContent = differs
+          ? 'Bypass confirmed: the popup returned real values.'
+          : 'No bypass: the popup is farbled.';
+        verdict.className = differs ? 'verdict bad' : 'verdict ok';
+      }
+
+      document.getElementById('status').textContent = 'Done.';
+    }
+
+    function inspect() {
+      const w = window.open('');
+      if (!w) {
+        document.getElementById('status').textContent =
+          'Popup blocked. Allow popups for this origin and retry.';
+        return;
+      }
+      w.document.write(
+        '<!doctype html><html><head><title>about:blank probe<\/title>'
+        + '<style>body{font-family:system-ui,sans-serif;padding:2em;}'
+        + 'table{border-collapse:collapse;}'
+        + 'th,td{padding:6px 12px;border:1px solid #ccc;'
+        + 'font-family:ui-monospace,monospace;font-size:.9em;}<\/style><\/head>'
+        + '<body><p><code id="href"><\/code><\/p>'
+        + '<table><thead><tr><th>Surface<\/th><th>Value<\/th><\/tr><\/thead>'
+        + '<tbody id="vals"><\/tbody><\/table>'
+        + '<script>' + probeSurfaces.toString() + ';'
+        + 'document.getElementById("href").textContent = location.href;'
+        + 'probeSurfaces().then(function (v) {'
+        + 'var t = document.getElementById("vals");'
+        + 'Object.keys(v).forEach(function (k) {'
+        + 'var tr = document.createElement("tr");'
+        + 'var a = document.createElement("td"); a.textContent = k;'
+        + 'var b = document.createElement("td"); b.textContent = v[k];'
+        + 'tr.appendChild(a); tr.appendChild(b); t.appendChild(tr); }); });'
+        + '<\/script><\/body><\/html>');
+      w.document.close();
+      document.getElementById('status').textContent = 'Popup left open.';
+    }
+  </script>
+</body>
+</html>
