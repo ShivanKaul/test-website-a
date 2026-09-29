@@ -1,2 +1,6 @@
 /server-redirect/go  https://test-website-b.pages.dev/server-redirect/headers  302
 /server-redirect/lobsters  https://lobste.rs  302
+/blob-farbling-bypass  /popup-farbling  301
+/blob-farbling-bypass/*  /popup-farbling  301
+/about-blank-popup-farbling  /popup-farbling  301
+/about-blank-popup-farbling/*  /popup-farbling  301

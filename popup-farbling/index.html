@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Popup Farbling</title>
+  <style>
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    td.val { font-family: var(--font-mono); font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>Farbling in popups</h1>
+
+  <div class="card">
+    <p>A popup can report the device's real fingerprinting values instead of the
+    randomized ones its opener sees. This opens two popups, one blank and one
+    from a <code>blob:</code> URL, and compares both against this page. Matching
+    values are correct.</p>
+    <p class="small muted">Shields up, fingerprinting protection on, popups
+    allowed. <b>Test</b> reads the values inside each popup. <b>Control</b>
+    reads the blank popup's values from this page first, which should match.</p>
+    <div class="btn-row">
+      <button onclick="run(false)">Test</button>
+      <button onclick="run(true)">Control</button>
+    </div>
+    <p id="status" class="status"></p>
+    <table id="resultsTable" style="display:none;">
+      <thead>
+        <tr>
+          <th>Surface</th><th>This page</th>
+          <th><code>about:blank</code></th><th><code>blob:</code></th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+    <p id="verdictBlank"></p>
+    <p id="verdictBlob"></p>
+  </div>
+
+  <script>
+    async function probeSurfaces() {
+      function hash(str) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = (h * 0x01000193) >>> 0;
+        }
+        return h.toString(16).padStart(8, '0');
+      }
+
+      const out = {};
+
+      try {
+        const c = document.createElement('canvas');
+        c.width = 220;
+        c.height = 40;
+        const ctx = c.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.font = '16px Arial';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(0, 0, 110, 20);
+        ctx.fillStyle = '#069';
+        ctx.fillText('farbling probe ✈', 2, 2);
+        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        ctx.fillText('farbling probe ✈', 4, 12);
+        out.canvas = hash(c.toDataURL());
+      } catch (e) {
+        out.canvas = 'error: ' + e.message;
+      }
+
+      out.hardwareConcurrency = String(navigator.hardwareConcurrency);
+      out.deviceMemory = String(
+        navigator.deviceMemory === undefined ? 'N/A' : navigator.deviceMemory);
+      out.plugins = String(navigator.plugins.length);
+      out['navigator.languages'] = (navigator.languages || []).join(',');
+      out['screen.width'] = String(screen.width);
+      out['screen.height'] = String(screen.height);
+      out['screen.availWidth'] = String(screen.availWidth);
+      out['screen.availHeight'] = String(screen.availHeight);
+
+      try {
+        const gl = document.createElement('canvas').getContext('webgl');
+        out.webgl = gl
+          ? hash((gl.getSupportedExtensions() || []).join(','))
+          : 'unavailable';
+      } catch (e) {
+        out.webgl = 'error: ' + e.message;
+      }
+
+      try {
+        const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        const ac = new AC(1, 5000, 44100);
+        const osc = ac.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = 10000;
+        osc.connect(ac.destination);
+        osc.start(0);
+        const data = (await ac.startRendering()).getChannelData(0);
+        let sum = 0;
+        for (let i = 4500; i < 5000; i++) {
+          sum += Math.abs(data[i]);
+        }
+        out.audio = sum.toFixed(10);
+      } catch (e) {
+        out.audio = 'error: ' + e.message;
+      }
+
+      return out;
+    }
+
+    const ORDER = ['canvas', 'hardwareConcurrency', 'deviceMemory', 'plugins',
+                   'audio', 'navigator.languages', 'webgl', 'screen.width',
+                   'screen.height', 'screen.availWidth', 'screen.availHeight'];
+
+    const inbox = {};
+    window.__receiveProbe = function (tag, vals) {
+      if (inbox[tag]) {
+        inbox[tag](vals);
+      }
+    };
+
+    function popupHtml(tag) {
+      return '<!doctype html><html><head><title>' + tag + ' probe<\/title><\/head>'
+        + '<body><p>Probing.<\/p><script>' + probeSurfaces.toString() + ';'
+        + 'probeSurfaces().then(function (v) {'
+        + 'window.opener.__receiveProbe("' + tag + '", v); });'
+        + '<\/script><\/body><\/html>';
+    }
+
+    function collect(tag) {
+      return new Promise(function (resolve) {
+        const timer = setTimeout(function () { resolve(null); }, 8000);
+        inbox[tag] = function (v) {
+          clearTimeout(timer);
+          resolve(v);
+        };
+      });
+    }
+
+    function run(control) {
+      const status = document.getElementById('status');
+
+      const blank = window.open('');
+      const blobUrl = URL.createObjectURL(
+        new Blob([popupHtml('blob')], { type: 'text/html' }));
+      const blob = window.open(blobUrl, '_blank');
+
+      if (!blank || !blob) {
+        status.textContent =
+          'Popups blocked. Allow popups for this origin and retry.';
+        if (blank) blank.close();
+        if (blob) blob.close();
+        return;
+      }
+
+      if (control) {
+        void blank.navigator.hardwareConcurrency;
+      }
+
+      const blankResult = collect('blank');
+      const blobResult = collect('blob');
+      blank.document.write(popupHtml('blank'));
+      blank.document.close();
+
+      status.textContent = control ? 'Running control...' : 'Running test...';
+
+      Promise.all([probeSurfaces(), blankResult, blobResult])
+        .then(function (r) {
+          try { blank.close(); } catch (e) {}
+          try { blob.close(); } catch (e) {}
+          URL.revokeObjectURL(blobUrl);
+          if (!r[1] && !r[2]) {
+            status.textContent = 'Timed out waiting for the popups.';
+            return;
+          }
+          render(r[0], r[1], r[2], control);
+        });
+    }
+
+    function cell(tr, cls, text) {
+      const td = document.createElement('td');
+      td.className = cls;
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+
+    function render(mine, blank, blob, control) {
+      const tbody = document.getElementById('results');
+      tbody.innerHTML = '';
+      let blankDiffers = false;
+      let blobDiffers = false;
+
+      ORDER.forEach(function (key) {
+        const a = String(mine[key]);
+        const tr = document.createElement('tr');
+        cell(tr, '', key);
+        cell(tr, 'val', a);
+
+        [[blank, 'blank'], [blob, 'blob']].forEach(function (pair) {
+          if (!pair[0]) {
+            cell(tr, 'val', 'no result');
+            return;
+          }
+          const b = String(pair[0][key]);
+          const same = a === b;
+          if (!same) {
+            if (pair[1] === 'blank') {
+              blankDiffers = true;
+            } else {
+              blobDiffers = true;
+            }
+          }
+          cell(tr, 'val ' + (same ? 'match' : 'mismatch'), b);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('resultsTable').style.display = '';
+      say('verdictBlank', 'about:blank popup', blank, blankDiffers, control);
+      say('verdictBlob', 'blob: popup', blob, blobDiffers, false);
+      document.getElementById('status').textContent = 'Done.';
+    }
+
+    function say(id, label, result, differs, control) {
+      const el = document.getElementById(id);
+      if (!result) {
+        el.textContent = label + ': no result.';
+        el.className = 'verdict warn';
+        return;
+      }
+      if (control && !differs) {
+        el.textContent = label + ': matched, as expected for the control.';
+        el.className = 'verdict ok';
+        return;
+      }
+      el.textContent = differs
+        ? label + ': returned real values.'
+        : label + ': farbled like this page.';
+      el.className = differs ? 'verdict bad' : 'verdict ok';
+    }
+  </script>
+</body>
+</html>

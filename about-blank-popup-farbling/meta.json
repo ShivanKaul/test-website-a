@@ -1,5 +1,0 @@
-{
-  "title": "about:blank Popup Farbling Bypass",
-  "description": "Tests whether Brave's fingerprinting farbling applies inside a popup opened with window.open(''). With Shields up and fingerprinting protection on, seven surfaces in the popup report the device's real values while the opener reports randomized ones. A control run reads the popup's values from the opener first, which returns them randomized, so the outcome depends on which page reads first.",
-  "added": "2026-09-29"
-}
