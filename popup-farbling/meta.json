@@ -1,5 +1,5 @@
 {
   "title": "Popup Farbling",
-  "description": "Tests whether Brave's fingerprinting farbling applies inside popups. With Shields up and fingerprinting protection on, eleven surfaces are read in the opener, in a blank popup from window.open(''), and in a popup from a blob: URL. The blank popup reports the device's real values while the opener reports randomized ones. A control run reads the blank popup's values from the opener first, which returns them randomized, so the outcome depends on which page reads first.",
+  "description": "Tests whether Brave's fingerprinting farbling applies inside popups. With Shields up and fingerprinting protection on, eleven surfaces are read in the opener, in a blank popup from window.open(''), and in a popup from a blob: URL. The blank popup reports the device's real values while the opener reports randomized ones. A control run reads the blank popup's values from the opener before the popup reads them itself, which returns them randomized, so the outcome depends on which page reads first. One popup per click, since a click allows exactly one.",
   "added": "2026-06-02"
 }

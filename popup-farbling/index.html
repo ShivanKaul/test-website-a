@@ -5,6 +5,7 @@
   <style>
     .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
     td.val { font-family: var(--font-mono); font-size: 0.85em; }
+    td.none { color: var(--muted); font-size: 0.85em; }
   </style>
 </head>
 <body>
@@ -12,15 +13,16 @@
 
   <div class="card">
     <p>A popup can report the device's real fingerprinting values instead of the
-    randomized ones its opener sees. This opens two popups, one blank and one
-    from a <code>blob:</code> URL, and compares both against this page. Matching
-    values are correct.</p>
-    <p class="small muted">Shields up, fingerprinting protection on, popups
-    allowed. <b>Test</b> reads the values inside each popup. <b>Control</b>
-    reads the blank popup's values from this page first, which should match.</p>
+    randomized ones its opener sees. Each button opens one popup and compares its
+    values against this page. Matching values are correct.</p>
+    <p class="small muted">Shields up, fingerprinting protection on. One popup
+    per click, since a click allows exactly one.
+    <b>Control</b> reads the blank popup's values from this page before the popup
+    reads them itself, which should match.</p>
     <div class="btn-row">
-      <button onclick="run(false)">Test</button>
-      <button onclick="run(true)">Control</button>
+      <button onclick="runBlank(false)">Open about:blank</button>
+      <button onclick="runBlob()">Open blob:</button>
+      <button onclick="runBlank(true)">Control</button>
     </div>
     <p id="status" class="status"></p>
     <table id="resultsTable" style="display:none;">
@@ -111,7 +113,9 @@
                    'audio', 'navigator.languages', 'webgl', 'screen.width',
                    'screen.height', 'screen.availWidth', 'screen.availHeight'];
 
+    const state = { mine: null, blank: null, blob: null, control: false };
     const inbox = {};
+
     window.__receiveProbe = function (tag, vals) {
       if (inbox[tag]) {
         inbox[tag](vals);
@@ -136,44 +140,62 @@
       });
     }
 
-    function run(control) {
-      const status = document.getElementById('status');
+    function mineOnce() {
+      if (!state.mine) {
+        state.mine = probeSurfaces();
+      }
+      return state.mine;
+    }
 
-      const blank = window.open('');
-      const blobUrl = URL.createObjectURL(
-        new Blob([popupHtml('blob')], { type: 'text/html' }));
-      const blob = window.open(blobUrl, '_blank');
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
 
-      if (!blank || !blob) {
-        status.textContent =
-          'Popups blocked. Allow popups for this origin and retry.';
-        if (blank) blank.close();
-        if (blob) blob.close();
+    function finish(tag, vals, popup, cleanup) {
+      try { popup.close(); } catch (e) {}
+      if (cleanup) cleanup();
+      if (!vals) {
+        setStatus('Timed out waiting for the ' + tag + ' popup.');
         return;
       }
+      state[tag] = vals;
+      setStatus('Done.');
+      render();
+    }
 
-      if (control) {
-        void blank.navigator.hardwareConcurrency;
+    function runBlank(control) {
+      const w = window.open('');
+      if (!w) {
+        setStatus('The popup did not open. Click the button directly and retry.');
+        return;
       }
+      if (control) {
+        void w.navigator.hardwareConcurrency;
+      }
+      state.control = control;
+      const pending = collect('blank');
+      w.document.write(popupHtml('blank'));
+      w.document.close();
+      setStatus(control ? 'Running control...' : 'Reading about:blank popup...');
+      Promise.all([mineOnce(), pending]).then(function (r) {
+        finish('blank', r[1], w, null);
+      });
+    }
 
-      const blankResult = collect('blank');
-      const blobResult = collect('blob');
-      blank.document.write(popupHtml('blank'));
-      blank.document.close();
-
-      status.textContent = control ? 'Running control...' : 'Running test...';
-
-      Promise.all([probeSurfaces(), blankResult, blobResult])
-        .then(function (r) {
-          try { blank.close(); } catch (e) {}
-          try { blob.close(); } catch (e) {}
-          URL.revokeObjectURL(blobUrl);
-          if (!r[1] && !r[2]) {
-            status.textContent = 'Timed out waiting for the popups.';
-            return;
-          }
-          render(r[0], r[1], r[2], control);
-        });
+    function runBlob() {
+      const url = URL.createObjectURL(
+        new Blob([popupHtml('blob')], { type: 'text/html' }));
+      const w = window.open(url, '_blank');
+      if (!w) {
+        URL.revokeObjectURL(url);
+        setStatus('The popup did not open. Click the button directly and retry.');
+        return;
+      }
+      const pending = collect('blob');
+      setStatus('Reading blob: popup...');
+      Promise.all([mineOnce(), pending]).then(function (r) {
+        finish('blob', r[1], w, function () { URL.revokeObjectURL(url); });
+      });
     }
 
     function cell(tr, cls, text) {
@@ -183,49 +205,46 @@
       tr.appendChild(td);
     }
 
-    function render(mine, blank, blob, control) {
-      const tbody = document.getElementById('results');
-      tbody.innerHTML = '';
-      let blankDiffers = false;
-      let blobDiffers = false;
+    function render() {
+      Promise.resolve(state.mine).then(function (mine) {
+        const tbody = document.getElementById('results');
+        tbody.innerHTML = '';
+        const differs = { blank: false, blob: false };
 
-      ORDER.forEach(function (key) {
-        const a = String(mine[key]);
-        const tr = document.createElement('tr');
-        cell(tr, '', key);
-        cell(tr, 'val', a);
+        ORDER.forEach(function (key) {
+          const a = String(mine[key]);
+          const tr = document.createElement('tr');
+          cell(tr, '', key);
+          cell(tr, 'val', a);
 
-        [[blank, 'blank'], [blob, 'blob']].forEach(function (pair) {
-          if (!pair[0]) {
-            cell(tr, 'val', 'no result');
-            return;
-          }
-          const b = String(pair[0][key]);
-          const same = a === b;
-          if (!same) {
-            if (pair[1] === 'blank') {
-              blankDiffers = true;
-            } else {
-              blobDiffers = true;
+          ['blank', 'blob'].forEach(function (tag) {
+            if (!state[tag]) {
+              cell(tr, 'none', 'not run');
+              return;
             }
-          }
-          cell(tr, 'val ' + (same ? 'match' : 'mismatch'), b);
+            const b = String(state[tag][key]);
+            const same = a === b;
+            if (!same) {
+              differs[tag] = true;
+            }
+            cell(tr, 'val ' + (same ? 'match' : 'mismatch'), b);
+          });
+
+          tbody.appendChild(tr);
         });
 
-        tbody.appendChild(tr);
+        document.getElementById('resultsTable').style.display = '';
+        say('verdictBlank', 'about:blank popup', state.blank, differs.blank,
+            state.control);
+        say('verdictBlob', 'blob: popup', state.blob, differs.blob, false);
       });
-
-      document.getElementById('resultsTable').style.display = '';
-      say('verdictBlank', 'about:blank popup', blank, blankDiffers, control);
-      say('verdictBlob', 'blob: popup', blob, blobDiffers, false);
-      document.getElementById('status').textContent = 'Done.';
     }
 
     function say(id, label, result, differs, control) {
       const el = document.getElementById(id);
       if (!result) {
-        el.textContent = label + ': no result.';
-        el.className = 'verdict warn';
+        el.textContent = '';
+        el.className = '';
         return;
       }
       if (control && !differs) {
