@@ -16,13 +16,10 @@
     randomized ones its opener sees. Each button opens one popup and compares its
     values against this page. Matching values are correct.</p>
     <p class="small muted">Shields up, fingerprinting protection on. One popup
-    per click, since a click allows exactly one.
-    <b>Control</b> reads the blank popup's values from this page before the popup
-    reads them itself, which should match.</p>
+    per click, since a click allows exactly one.</p>
     <div class="btn-row">
-      <button onclick="runBlank(false)">Open about:blank</button>
+      <button onclick="runBlank()">Open about:blank</button>
       <button onclick="runBlob()">Open blob:</button>
-      <button onclick="runBlank(true)">Control</button>
     </div>
     <p id="status" class="status"></p>
     <table id="resultsTable" style="display:none;">
@@ -83,7 +80,7 @@
     const INFO = new Set(['screen.width', 'screen.height', 'screen.availWidth',
                           'screen.availHeight']);
 
-    const state = { mine: null, blank: null, blob: null, control: false };
+    const state = { mine: null, blank: null, blob: null };
     const inbox = {};
 
     window.__receiveProbe = function (tag, vals) {
@@ -133,20 +130,16 @@
       render();
     }
 
-    function runBlank(control) {
+    function runBlank() {
       const w = window.open('');
       if (!w) {
         setStatus('The popup did not open. Click the button directly and retry.');
         return;
       }
-      if (control) {
-        void w.navigator.hardwareConcurrency;
-      }
-      state.control = control;
       const pending = collect('blank');
       w.document.write(popupHtml('blank'));
       w.document.close();
-      setStatus(control ? 'Running control...' : 'Reading about:blank popup...');
+      setStatus('Reading about:blank popup...');
       Promise.all([mineOnce(), pending]).then(function (r) {
         finish('blank', r[1], w, null);
       });
@@ -209,22 +202,16 @@
 
         document.getElementById('resultsTable').style.display = '';
         document.getElementById('footnote').style.display = '';
-        say('verdictBlank', 'about:blank popup', state.blank, differs.blank,
-            state.control);
-        say('verdictBlob', 'blob: popup', state.blob, differs.blob, false);
+        say('verdictBlank', 'about:blank popup', state.blank, differs.blank);
+        say('verdictBlob', 'blob: popup', state.blob, differs.blob);
       });
     }
 
-    function say(id, label, result, differs, control) {
+    function say(id, label, result, differs) {
       const el = document.getElementById(id);
       if (!result) {
         el.textContent = '';
         el.className = '';
-        return;
-      }
-      if (control && !differs) {
-        el.textContent = label + ': matched, as expected for the control.';
-        el.className = 'verdict ok';
         return;
       }
       el.textContent = differs
