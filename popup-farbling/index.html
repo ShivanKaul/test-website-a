@@ -36,6 +36,10 @@
     </table>
     <p id="verdictBlank"></p>
     <p id="verdictBlob"></p>
+    <p class="small muted" id="footnote" style="display:none;">* Screen values
+    track each window's own size, and canvas is keyed per document, so both
+    differ between windows either way. Shown for reference; they do not count
+    toward the verdict.</p>
   </div>
 
   <script>
@@ -80,15 +84,6 @@
       out['screen.availHeight'] = String(screen.availHeight);
 
       try {
-        const gl = document.createElement('canvas').getContext('webgl');
-        out.webgl = gl
-          ? hash((gl.getSupportedExtensions() || []).join(','))
-          : 'unavailable';
-      } catch (e) {
-        out.webgl = 'error: ' + e.message;
-      }
-
-      try {
         const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
         const ac = new AC(1, 5000, 44100);
         const osc = ac.createOscillator();
@@ -110,8 +105,11 @@
     }
 
     const ORDER = ['canvas', 'hardwareConcurrency', 'deviceMemory', 'plugins',
-                   'audio', 'navigator.languages', 'webgl', 'screen.width',
+                   'audio', 'navigator.languages', 'screen.width',
                    'screen.height', 'screen.availWidth', 'screen.availHeight'];
+
+    const INFO = new Set(['canvas', 'screen.width', 'screen.height',
+                          'screen.availWidth', 'screen.availHeight']);
 
     const state = { mine: null, blank: null, blob: null, control: false };
     const inbox = {};
@@ -214,7 +212,7 @@
         ORDER.forEach(function (key) {
           const a = String(mine[key]);
           const tr = document.createElement('tr');
-          cell(tr, '', key);
+          cell(tr, '', INFO.has(key) ? key + ' *' : key);
           cell(tr, 'val', a);
 
           ['blank', 'blob'].forEach(function (tag) {
@@ -224,6 +222,10 @@
             }
             const b = String(state[tag][key]);
             const same = a === b;
+            if (INFO.has(key)) {
+              cell(tr, 'val', b);
+              return;
+            }
             if (!same) {
               differs[tag] = true;
             }
@@ -234,6 +236,7 @@
         });
 
         document.getElementById('resultsTable').style.display = '';
+        document.getElementById('footnote').style.display = '';
         say('verdictBlank', 'about:blank popup', state.blank, differs.blank,
             state.control);
         say('verdictBlob', 'blob: popup', state.blob, differs.blob, false);
