@@ -1,5 +1,5 @@
 {
   "title": "about:blank Popup Farbling Bypass",
-  "description": "Tests whether Brave's fingerprinting farbling applies inside a top-level about:blank popup from window.open(''). Such a popup commits in the renderer and never fires ReadyToCommitNavigation, the only hook that delivers Shields settings to a document, so farbling falls back to OFF and seven surfaces return real values. A control run shows the outcome depends on whether the opener or the popup's own realm reads first.",
+  "description": "Tests whether Brave's fingerprinting farbling applies inside a popup opened with window.open(''). With Shields up and fingerprinting protection on, seven surfaces in the popup report the device's real values while the opener reports randomized ones. A control run reads the popup's values from the opener first, which returns them randomized, so the outcome depends on which page reads first.",
   "added": "2026-09-29"
 }

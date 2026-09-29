@@ -11,14 +11,13 @@
   <h1>Farbling in an <code>about:blank</code> popup</h1>
 
   <div class="card">
-    <p>A top-level popup from <code>window.open('')</code> commits in the
-    renderer, so it never receives Shields settings and farbling falls back to
-    <b>OFF</b>. An <code>about:blank</code> iframe inherits from its frame root
-    and is unaffected.</p>
+    <p>A popup opened with <code>window.open('')</code> reports the device's
+    real fingerprinting values, while this page reports randomized ones. An
+    <code>about:blank</code> iframe is not affected.</p>
     <p class="small muted">Shields up, fingerprinting protection on, popups
-    allowed. <b>Test</b> probes inside the popup and should differ on a buggy
-    build. <b>Control</b> reads from this page first, which makes the popup
-    inherit these settings, and should match either way.</p>
+    allowed. <b>Test</b> reads the values inside the popup; on an affected build
+    they differ from this page. <b>Control</b> reads the popup's values from this
+    page first; those should match.</p>
     <div class="btn-row">
       <button onclick="run(false)">Test</button>
       <button onclick="run(true)">Control</button>
