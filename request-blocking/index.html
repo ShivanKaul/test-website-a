@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Request Blocking</title>
+  <style>
+    td.url { font-family: var(--font-mono); font-size: 0.85em; word-break: break-all; }
+    td.res { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <h1>Request Blocking</h1>
+
+  <div class="card">
+    <p>Each URL is requested with <code>fetch(url, { mode: 'no-cors' })</code>.
+    Any HTTP response counts as loaded, a network error as blocked, and no
+    answer within 8 seconds as no response.</p>
+    <button onclick="run()">Run again</button>
+    <p id="status" class="status"></p>
+  </div>
+
+  <div id="groups"></div>
+
+  <script>
+    const GROUPS = [
+      ['Group 1', [
+        'https://prod.uidapi.com/',
+        'https://id5-sync.com/',
+        'https://eu-1-id5-sync.com/',
+        'https://match.adsrvr.org/',
+        'https://idsync.rlcdn.com/',
+        'https://pippio.com/',
+        'https://permutive.com/',
+        'https://a.ad.gt/',
+      ]],
+      ['Group 2', [
+        'https://www.google-analytics.com/robots.txt',
+        'https://stats.g.doubleclick.net/robots.txt',
+        'https://sb.scorecardresearch.com/robots.txt',
+        'https://dpm.demdex.net/robots.txt',
+        'https://static.criteo.net/robots.txt',
+        'https://cdn.taboola.com/robots.txt',
+      ]],
+      ['Group 3', [
+        'https://www.google-analytics.com/analytics.js',
+        'https://sb.scorecardresearch.com/p?c1=2',
+        'https://dpm.demdex.net/id',
+        'https://static.criteo.net/js/ld/publishertag.prebid.js',
+        'https://bidder.criteo.com/sync',
+      ]],
+      ['Group 4', [
+        'https://cdn.ampproject.org/v0.js',
+        'https://cdn.optimizely.com/robots.txt',
+        'https://cdn.matomo.cloud/robots.txt',
+        'https://fast.wistia.com/robots.txt',
+        'https://assets.vidyard.com/robots.txt',
+      ]],
+      ['Control', [
+        'https://test-website-b.pages.dev/',
+        'https://example.com/',
+      ]],
+    ];
+
+    const TIMEOUT_MS = 8000;
+
+    function probe(url) {
+      const timeout = new Promise(function (resolve) {
+        setTimeout(function () { resolve('timeout'); }, TIMEOUT_MS);
+      });
+      const request = fetch(url, { mode: 'no-cors', cache: 'no-store' })
+        .then(function () { return 'loaded'; },
+              function () { return 'blocked'; });
+      return Promise.race([request, timeout]);
+    }
+
+    const LABELS = {
+      loaded: ['Loaded', 'ok'],
+      blocked: ['Blocked', 'bad'],
+      timeout: ['No response', 'warn'],
+    };
+
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    async function run() {
+      const root = document.getElementById('groups');
+      const status = document.getElementById('status');
+      root.innerHTML = '';
+      status.textContent = 'Running...';
+
+      const jobs = GROUPS.map(function ([name, urls]) {
+        const card = el('div', 'card');
+        const heading = el('h2', '', name);
+        const table = el('table');
+        const thead = el('thead');
+        const hr = el('tr');
+        hr.appendChild(el('th', '', 'URL'));
+        hr.appendChild(el('th', '', 'Result'));
+        thead.appendChild(hr);
+        const tbody = el('tbody');
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        card.appendChild(heading);
+        card.appendChild(table);
+        root.appendChild(card);
+
+        return Promise.all(urls.map(async function (url) {
+          const tr = el('tr');
+          tr.appendChild(el('td', 'url', url));
+          const td = el('td', 'res muted', '...');
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+          const result = await probe(url);
+          td.textContent = LABELS[result][0];
+          td.className = 'res ' + LABELS[result][1];
+          return result;
+        })).then(function (results) {
+          const blocked = results.filter(function (r) { return r === 'blocked'; }).length;
+          heading.textContent = name + ': ' + blocked + ' of ' + results.length + ' blocked';
+        });
+      });
+
+      await Promise.all(jobs);
+      status.textContent = 'Done.';
+    }
+
+    run();
+  </script>
+</body>
+</html>

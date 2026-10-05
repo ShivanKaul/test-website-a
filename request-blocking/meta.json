@@ -1,0 +1,5 @@
+{
+  "title": "Request Blocking",
+  "description": "Requests a set of third-party URLs from this page and reports which ones were blocked.",
+  "added": "2026-10-05"
+}
