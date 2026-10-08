@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Screen Farbling in Iframes</title>
+  <style>
+    td.val { font-family: var(--font-mono); font-size: 0.85em; }
+    td.none { color: var(--muted); font-size: 0.85em; }
+    .frames iframe { width: 160px; height: 40px; border: 1px solid var(--line); }
+  </style>
+</head>
+<body>
+  <h1>Screen farbling in iframes</h1>
+
+  <div class="card">
+    <p>Iframes should see the same screen and window sizes as this page.</p>
+    <p class="small muted">Shields up, fingerprinting protection on.</p>
+    <button onclick="run()">Run again</button>
+    <p id="status" class="status"></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Value</th><th>This page</th>
+          <th>Same-site iframe</th><th>Cross-site iframe</th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+    <p id="verdictSame"></p>
+    <p id="verdictCross"></p>
+  </div>
+
+  <div class="frames" id="frames"></div>
+
+  <script>
+    const ORIGIN_B = "https://test-website-b.pages.dev";
+    const PATH = "/screen-farbling-iframes/frame.html";
+
+    const FRAMES = {
+      same: location.origin + PATH + "?label=same",
+      cross: ORIGIN_B + PATH + "?label=cross",
+    };
+
+    const ORDER = ["outerWidth", "outerHeight", "device-width", "device-height",
+                   "screenX", "screenY", "screen.width", "screen.height"];
+
+    function mediaMax(feature) {
+      let lo = 0, hi = 20000;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (matchMedia("(min-" + feature + ": " + mid + "px)").matches) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return lo;
+    }
+
+    function probe() {
+      return {
+        outerWidth: outerWidth,
+        outerHeight: outerHeight,
+        "device-width": mediaMax("device-width"),
+        "device-height": mediaMax("device-height"),
+        screenX: screenX,
+        screenY: screenY,
+        "screen.width": screen.width,
+        "screen.height": screen.height,
+      };
+    }
+
+    let state = {};
+
+    window.addEventListener("message", function (e) {
+      const d = e.data || {};
+      const expected = d.label && FRAMES[d.label];
+      if (!expected || new URL(expected).origin !== e.origin) {
+        return;
+      }
+      state[d.label] = d.values;
+      render();
+    });
+
+    function run() {
+      state = { mine: probe() };
+      document.getElementById("status").textContent = "Waiting for iframes...";
+      const box = document.getElementById("frames");
+      box.innerHTML = "";
+      Object.values(FRAMES).forEach(function (src) {
+        const f = document.createElement("iframe");
+        f.src = src;
+        box.appendChild(f);
+      });
+      render();
+    }
+
+    function cell(tr, cls, text) {
+      const td = document.createElement("td");
+      td.className = cls;
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+
+    function render() {
+      const tbody = document.getElementById("results");
+      tbody.innerHTML = "";
+      const differs = { same: false, cross: false };
+
+      ORDER.forEach(function (key) {
+        const a = String(state.mine[key]);
+        const tr = document.createElement("tr");
+        cell(tr, "", key);
+        cell(tr, "val", a);
+
+        ["same", "cross"].forEach(function (tag) {
+          if (!state[tag]) {
+            cell(tr, "none", "waiting");
+            return;
+          }
+          const b = String(state[tag][key]);
+          if (a !== b) {
+            differs[tag] = true;
+          }
+          cell(tr, "val " + (a === b ? "match" : "mismatch"), b);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      if (state.same && state.cross) {
+        document.getElementById("status").textContent = "Done.";
+      }
+      say("verdictSame", "Same-site iframe", state.same, differs.same);
+      say("verdictCross", "Cross-site iframe", state.cross, differs.cross);
+    }
+
+    function say(id, label, result, differs) {
+      const el = document.getElementById(id);
+      if (!result) {
+        el.textContent = "";
+        el.className = "";
+        return;
+      }
+      el.textContent = differs
+        ? label + ": returned real values."
+        : label + ": matches this page.";
+      el.className = differs ? "verdict bad" : "verdict ok";
+    }
+
+    run();
+  </script>
+</body>
+</html>

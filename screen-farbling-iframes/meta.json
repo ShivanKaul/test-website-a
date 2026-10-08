@@ -1,0 +1,5 @@
+{
+  "title": "Screen Farbling in Iframes",
+  "description": "Compares screen and window size values read by this page, a same-site iframe, and a cross-site iframe. With fingerprinting protection on, all three should match.",
+  "added": "2026-10-08"
+}
