@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenAI Ads Pixel</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    td.res { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <h1>OpenAI Ads Pixel</h1>
+
+  <div class="card">
+    <p>Loads the <a href="https://developers.openai.com/ads/measurement-pixel">OpenAI ads measurement pixel</a>
+    and checks each of its requests and cookies.</p>
+    <button onclick="location.reload()">Run again</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Check</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>SDK script (<code>bzrcdn.openai.com/sdk/oaiq.min.js</code>)</td><td class="res muted" id="sdk">...</td></tr>
+        <tr><td>Pixel config (<code>bzrcdn.openai.com/pixel-config/v1/…</code>)</td><td class="res muted" id="config">...</td></tr>
+        <tr><td>Events endpoint (<code>bzr.openai.com/v1/sdk/events</code>)</td><td class="res muted" id="events">...</td></tr>
+        <tr><td><code>__obref</code> cookie</td><td class="res muted" id="obref">...</td></tr>
+        <tr><td><code>__oppref</code> cookie</td><td class="res muted" id="oppref">...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const PIXEL_ID = 'test';
+    const SDK_URL = 'https://bzrcdn.openai.com/sdk/oaiq.min.js';
+    const CONFIG_URL = 'https://bzrcdn.openai.com/pixel-config/v1/' + PIXEL_ID + '.json';
+    const EVENTS_URL = 'https://bzr.openai.com/v1/sdk/events';
+    const TIMEOUT_MS = 8000;
+
+    function set(id, text, cls) {
+      const td = document.getElementById(id);
+      td.textContent = text;
+      td.className = 'res ' + cls;
+    }
+
+    function probe(url) {
+      const timeout = new Promise(function (resolve) {
+        setTimeout(function () { resolve('timeout'); }, TIMEOUT_MS);
+      });
+      const request = fetch(url, { mode: 'no-cors', cache: 'no-store' })
+        .then(function () { return 'loaded'; },
+              function () { return 'blocked'; });
+      return Promise.race([request, timeout]);
+    }
+
+    const LABELS = {
+      loaded: ['Loaded', 'ok'],
+      blocked: ['Blocked', 'bad'],
+      timeout: ['No response', 'warn'],
+    };
+
+    function hasCookie(name) {
+      return document.cookie.split('; ').some(function (c) { return c.startsWith(name + '='); });
+    }
+
+    function checkCookies() {
+      ['obref', 'oppref'].forEach(function (id) {
+        if (hasCookie('__' + id)) set(id, 'Set', 'ok');
+        else set(id, 'Not set', 'bad');
+      });
+    }
+
+    ['__obref', '__oppref'].forEach(function (name) {
+      document.cookie = name + '=; path=/; max-age=0';
+    });
+    localStorage.removeItem('oaiq_consent');
+
+    const url = new URL(location.href);
+    if (url.searchParams.get('oppref') !== 'test') {
+      url.searchParams.set('oppref', 'test');
+      history.replaceState(null, '', url);
+    }
+
+    window.oaiq = function () { (window.oaiq.q = window.oaiq.q || []).push(arguments); };
+    oaiq('init', { pixelId: PIXEL_ID });
+    oaiq('measure', 'page_viewed', { type: 'contents' });
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = SDK_URL;
+    script.onload = function () {
+      set('sdk', 'Loaded', 'ok');
+      setTimeout(checkCookies, 3000);
+    };
+    script.onerror = function () {
+      set('sdk', 'Blocked', 'bad');
+      checkCookies();
+    };
+    document.head.appendChild(script);
+
+    [['config', CONFIG_URL], ['events', EVENTS_URL]].forEach(async function ([id, u]) {
+      const result = await probe(u);
+      set(id, LABELS[result][0], LABELS[result][1]);
+    });
+  </script>
+</body>
+</html>

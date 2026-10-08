@@ -1,0 +1,5 @@
+{
+  "title": "OpenAI Ads Pixel",
+  "description": "Checks whether the OpenAI ads measurement pixel loads, sends events, or sets cookies.",
+  "added": "2026-10-08"
+}
