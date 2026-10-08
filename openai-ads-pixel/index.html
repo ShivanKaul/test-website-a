@@ -75,8 +75,13 @@
       });
     }
 
-    ['__obref', '__oppref'].forEach(function (name) {
-      document.cookie = name + '=; path=/; max-age=0';
+    const parts = location.hostname.split('.');
+    const domains = [''];
+    for (let i = 0; i < parts.length - 1; i++) domains.push('; domain=' + parts.slice(i).join('.'));
+    ['__obref', '__oppref', '__oaiq_consent'].forEach(function (name) {
+      domains.forEach(function (d) {
+        document.cookie = name + '=; path=/; max-age=0' + d;
+      });
     });
     localStorage.removeItem('oaiq_consent');
 
