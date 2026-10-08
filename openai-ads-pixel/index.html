@@ -64,10 +64,14 @@
       return document.cookie.split('; ').some(function (c) { return c.startsWith(name + '='); });
     }
 
-    function checkCookies() {
+    function checkCookies(waitMs) {
+      const start = Date.now();
       ['obref', 'oppref'].forEach(function (id) {
-        if (hasCookie('__' + id)) set(id, 'Set', 'ok');
-        else set(id, 'Not set', 'bad');
+        (function poll() {
+          if (hasCookie('__' + id)) set(id, 'Set', 'ok');
+          else if (Date.now() - start >= waitMs) set(id, 'Not set', 'bad');
+          else setTimeout(poll, 100);
+        })();
       });
     }
 
@@ -91,11 +95,11 @@
     script.src = SDK_URL;
     script.onload = function () {
       set('sdk', 'Loaded', 'ok');
-      setTimeout(checkCookies, 3000);
+      checkCookies(3000);
     };
     script.onerror = function () {
       set('sdk', 'Blocked', 'bad');
-      checkCookies();
+      checkCookies(0);
     };
     document.head.appendChild(script);
 
