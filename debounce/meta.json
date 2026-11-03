@@ -1,0 +1,5 @@
+{
+  "title": "Debounce Tests",
+  "description": "Tests for Brave's debouncer, which skips known tracking redirects.",
+  "added": "2026-11-03"
+}

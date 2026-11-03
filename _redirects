@@ -2,3 +2,4 @@
 /server-redirect/lobsters  https://lobste.rs  302
 /about-blank-popup-farbling  /popup-farbling  301
 /about-blank-popup-farbling/*  /popup-farbling  301
+/debounce/view-source/go  https://dev-pages.brave.software/navigation-tracking/error.html?brave_testing=https://test-website-b.pages.dev/  302
