@@ -1,0 +1,5 @@
+{
+  "title": "View-Source Debounce",
+  "description": "Opens view-source: on a URL that redirects to a debounced URL.",
+  "added": "2026-11-03"
+}

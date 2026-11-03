@@ -68,9 +68,9 @@ echo "Generated index.html with ${count} test cards."
 
 # ---------------------------------------------------------------------------
 # Generate sub-index pages for group directories that contain test sub-dirs.
-# Currently: local-frames/, de-amp/
+# Currently: local-frames/, de-amp/, debounce/
 # ---------------------------------------------------------------------------
-for group_dir in local-frames de-amp; do
+for group_dir in local-frames de-amp debounce; do
   [ -d "$group_dir" ] || continue
   group_meta="${group_dir}/meta.json"
   [ -f "$group_meta" ] || continue
@@ -119,7 +119,7 @@ SUBEOF
 <body>
   <header class="site-header">
     <h1>${group_title}</h1>
-    <p><code>${SITE_DOMAIN}/${group_dir}/</code> &mdash; ${sub_count} tests &mdash; <a href="/">← All tests</a></p>
+    <p><code>${SITE_DOMAIN}/${group_dir}/</code> &mdash; ${sub_count} test$([ "$sub_count" -eq 1 ] || echo s) &mdash; <a href="/">← All tests</a></p>
   </header>
 ${sub_cards}
 </body>
