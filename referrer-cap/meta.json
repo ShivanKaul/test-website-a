@@ -1,0 +1,5 @@
+{
+  "title": "Referrer Cap",
+  "description": "Checks that Shields caps cross-origin referrers to the origin when a page asks for more (unsafe-url, no-referrer-when-downgrade), for images, fetch() and iframes, both directly and through a same-origin 302 redirect.",
+  "added": "2026-11-13"
+}

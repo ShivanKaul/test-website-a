@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Referrer Cap</title>
+  <style>
+    td.res { white-space: nowrap; }
+    td.raw { font-family: var(--font-mono); font-size: 0.85em; word-break: break-all; }
+    .frames iframe { position: absolute; width: 1px; height: 1px; border: 0; opacity: 0; }
+  </style>
+</head>
+<body>
+  <h1>Referrer Cap</h1>
+
+  <div class="card">
+    <p>Loads an image, a <code>fetch()</code> and an iframe from site B, directly
+    and through a same-origin 302 on this site. Requests ask for
+    <code>unsafe-url</code> or <code>no-referrer-when-downgrade</code>, and this
+    page's URL carries a fake secret (<code>?code=LEAK-...</code>). Site B should
+    only see <code>https://test-website-a.pages.dev/</code>.</p>
+    <p class="small muted">Shields up. With Shields down, every row except A sends the full URL.</p>
+    <button onclick="run()">Run again</button>
+    <p id="status" class="status"></p>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Case</th><th>Policy</th><th>Path</th>
+          <th>Image</th><th>fetch()</th><th>Iframe</th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+    <p id="verdict"></p>
+  </div>
+
+  <div class="card">
+    <p>Top-level navigations (should also show only the origin):</p>
+    <ul id="nav-links"></ul>
+  </div>
+
+  <details>
+    <summary>Referer values seen by site B</summary>
+    <table>
+      <thead><tr><th>Case</th><th>Request</th><th>Referer</th></tr></thead>
+      <tbody id="raw"></tbody>
+    </table>
+  </details>
+
+  <div class="frames" id="frames"></div>
+
+  <script>
+    const ORIGIN_B = 'https://test-website-b.pages.dev';
+    const ECHO = ORIGIN_B + '/referrer-cap/echo';
+    const GO = '/referrer-cap/go';
+    const TIMEOUT_MS = 8000;
+
+    // capped: Chromium sends the full URL here, so Brave must cap it.
+    // control: direct requests, which show whether the cap is on at all.
+    const CASES = [
+      { id: 'A', policy: '', via: true, path: 'Same-origin 302' },
+      { id: 'B', policy: '', via: true, rp: 'unsafe-url', capped: true,
+        path: 'Same-origin 302 that sends <code>Referrer-Policy: unsafe-url</code>' },
+      { id: 'C1', policy: 'unsafe-url', via: false, capped: true, control: true, path: 'Direct' },
+      { id: 'E1', policy: 'unsafe-url', via: true, capped: true, path: 'Same-origin 302' },
+      { id: 'C2', policy: 'no-referrer-when-downgrade', via: false, capped: true, control: true, path: 'Direct' },
+      { id: 'E2', policy: 'no-referrer-when-downgrade', via: true, capped: true, path: 'Same-origin 302' },
+    ];
+
+    const NAV_LINKS = [
+      { label: 'unsafe-url, same-origin 302', policy: 'unsafe-url', url: GO + '?as=html' },
+      { label: 'no-referrer-when-downgrade, same-origin 302', policy: 'no-referrer-when-downgrade', url: GO + '?as=html' },
+      { label: 'Default policy, 302 sends Referrer-Policy: unsafe-url', policy: '', url: GO + '?as=html&rp=unsafe-url' },
+      { label: 'unsafe-url, direct', policy: 'unsafe-url', url: ECHO + '?as=html' },
+    ];
+
+    function token() {
+      return (crypto.randomUUID && crypto.randomUUID()) ||
+        String(Date.now()) + Math.floor(Math.random() * 1e9);
+    }
+
+    function targetUrl(c, as, id) {
+      const q = new URLSearchParams({ as: as, id: id });
+      if (!c.via) return ECHO + '?' + q;
+      if (c.rp) q.set('rp', c.rp);
+      return GO + '?' + q;
+    }
+
+    function classify(referer) {
+      if (!referer) return 'none';
+      try {
+        const u = new URL(referer);
+        return u.pathname === '/' && !u.search ? 'origin' : 'full';
+      } catch (e) {
+        return 'other';
+      }
+    }
+
+    // Site B encodes the Referer in the SVG's size, since a cross-origin
+    // image can't be read and canvas readback is farbled.
+    function probeImage(c) {
+      return new Promise(function (resolve) {
+        const img = new Image();
+        if (c.policy) img.referrerPolicy = c.policy;
+        const timer = setTimeout(function () { resolve({ error: 'no response' }); }, TIMEOUT_MS);
+        img.onload = function () {
+          clearTimeout(timer);
+          const cls = { 1: 'none', 2: 'origin', 3: 'full' }[img.naturalWidth] || 'other';
+          resolve({ cls: cls, raw: '(' + cls + ', ' + (img.naturalHeight - 1) + ' chars)' });
+        };
+        img.onerror = function () { clearTimeout(timer); resolve({ error: 'load error' }); };
+        img.src = targetUrl(c, 'svg', token());
+      });
+    }
+
+    async function probeFetch(c) {
+      const opts = { cache: 'no-store' };
+      if (c.policy) opts.referrerPolicy = c.policy;
+      try {
+        const r = await fetch(targetUrl(c, 'json', token()), opts);
+        const data = await r.json();
+        return { cls: classify(data.referer), raw: data.referer || '(none)' };
+      } catch (e) {
+        return { error: String(e) };
+      }
+    }
+
+    function probeIframe(c) {
+      return new Promise(function (resolve) {
+        const id = token();
+        const frame = document.createElement('iframe');
+        if (c.policy) frame.referrerPolicy = c.policy;
+        const timer = setTimeout(function () { done({ error: 'no response' }); }, TIMEOUT_MS);
+        function onMessage(e) {
+          if (e.origin !== ORIGIN_B || !e.data || e.data.id !== id) return;
+          done({ cls: classify(e.data.referer), raw: e.data.referer || '(none)' });
+        }
+        function done(result) {
+          clearTimeout(timer);
+          window.removeEventListener('message', onMessage);
+          frame.remove();
+          resolve(result);
+        }
+        window.addEventListener('message', onMessage);
+        frame.src = targetUrl(c, 'html', id);
+        document.getElementById('frames').appendChild(frame);
+      });
+    }
+
+    const PROBES = [['Image', probeImage], ['fetch()', probeFetch], ['Iframe', probeIframe]];
+
+    function resultCell(c, result) {
+      const td = document.createElement('td');
+      if (result.error) {
+        td.className = 'res warn';
+        td.textContent = result.error;
+      } else if (result.cls === 'origin') {
+        td.className = 'res ok';
+        td.textContent = 'Origin';
+      } else if (result.cls === 'full') {
+        td.className = c.capped ? 'res leak' : 'res warn';
+        td.textContent = 'Full URL';
+      } else {
+        td.className = 'res warn';
+        td.textContent = result.cls;
+      }
+      return td;
+    }
+
+    function addRaw(c, kind, result) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + c.id + '</td><td>' + kind + '</td><td class="raw"></td>';
+      tr.lastElementChild.textContent = result.error ? '(' + result.error + ')' : result.raw;
+      document.getElementById('raw').appendChild(tr);
+    }
+
+    async function run() {
+      const status = document.getElementById('status');
+      const verdict = document.getElementById('verdict');
+      const tbody = document.getElementById('results');
+      tbody.innerHTML = '';
+      document.getElementById('raw').innerHTML = '';
+      verdict.textContent = '';
+      verdict.className = '';
+
+      const results = [];
+      for (const c of CASES) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + c.id + '</td><td><code>' + (c.policy || 'default') +
+          '</code></td><td>' + c.path + '</td>';
+        tbody.appendChild(tr);
+        for (const [kind, probe] of PROBES) {
+          status.textContent = 'Running ' + c.id + ' (' + kind + ')...';
+          const result = await probe(c);
+          results.push({ c: c, kind: kind, result: result });
+          tr.appendChild(resultCell(c, result));
+          addRaw(c, kind, result);
+        }
+      }
+      status.textContent = 'Done.';
+
+      const seen = results.filter(function (r) { return !r.result.error; });
+      const capOn = seen.some(function (r) { return r.c.control && r.result.cls === 'origin'; });
+      const leaks = seen.filter(function (r) { return r.c.capped && !r.c.control && r.result.cls === 'full'; });
+      const errors = results.length - seen.length;
+
+      if (!capOn) {
+        verdict.className = 'verdict warn';
+        verdict.textContent = 'Cap not active: direct requests sent the full URL (Shields down, or not Brave).';
+      } else if (leaks.length) {
+        verdict.className = 'verdict bad';
+        verdict.textContent = 'Leaked through a redirect: ' +
+          leaks.map(function (r) { return r.c.id + ' ' + r.kind; }).join(', ') + '.';
+      } else if (errors) {
+        verdict.className = 'verdict warn';
+        verdict.textContent = errors + ' request(s) failed; no leak in the rest.';
+      } else {
+        verdict.className = 'verdict ok';
+        verdict.textContent = 'Every cross-origin request was capped to the origin.';
+      }
+    }
+
+    function buildNavLinks() {
+      const ul = document.getElementById('nav-links');
+      for (const l of NAV_LINKS) {
+        const a = document.createElement('a');
+        a.href = l.url;
+        a.target = '_blank';
+        if (l.policy) a.referrerPolicy = l.policy;
+        a.textContent = l.label;
+        const li = document.createElement('li');
+        li.appendChild(a);
+        ul.appendChild(li);
+      }
+    }
+
+    // Give this page's URL a fake one-time secret, like an OAuth callback.
+    const params = new URLSearchParams(location.search);
+    if (!params.has('code')) {
+      params.set('code', 'LEAK-' + Math.random().toString(36).slice(2, 10));
+      location.replace(location.pathname + '?' + params);
+    } else {
+      buildNavLinks();
+      run();
+    }
+  </script>
+</body>
+</html>
