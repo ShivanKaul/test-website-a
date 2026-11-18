@@ -1,0 +1,5 @@
+{
+  "title": "Image Proxy Pixel",
+  "description": "Loads an anonymized tracking pixel wrapped in Proton Mail's image proxy and checks whether the request is blocked.",
+  "added": "2026-11-17"
+}

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image Proxy Pixel</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    td.res { white-space: nowrap; }
+    code.url { word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Image Proxy Pixel</h1>
+
+  <div class="card">
+    <p>Loads this URL as an image and with a <code>no-cors</code> <code>fetch()</code>:</p>
+    <p><code class="url" id="url"></code></p>
+    <p class="small muted">The proxy returns 401 without a Proton session, so the image fails even when nothing blocks it. The <code>fetch()</code> row tells a 401 apart from a blocked request.</p>
+    <button onclick="location.reload()">Run again</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Request</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><code>&lt;img&gt;</code></td><td class="res muted" id="img">...</td></tr>
+        <tr><td><code>fetch()</code></td><td class="res muted" id="fetch">...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const INNER = 'https://example.com/wf/open?upn=u001.-2FTestPixelToken0000-2BAnonymizedExample1111-2FabcdefABCDEF0123456789-2BzzzzYYYYxxxx';
+    const URL_ = 'https://mail.proton.me/api/core/v4/images?Url=' + encodeURIComponent(INNER) +
+      '&DryRun=0&UID=0000000000testtesttesttest000000';
+
+    function set(id, text, cls) {
+      const td = document.getElementById(id);
+      td.textContent = text;
+      td.className = 'res ' + cls;
+    }
+
+    document.getElementById('url').textContent = URL_;
+
+    const img = new Image();
+    img.onload = function () { set('img', 'Loaded', 'ok'); };
+    img.onerror = function () { set('img', 'Failed (blocked or 401)', 'warn'); };
+    img.src = URL_ + '&_=' + Date.now();
+
+    fetch(URL_ + '&_=' + Date.now(), { mode: 'no-cors', cache: 'no-store' })
+      .then(function () { set('fetch', 'Reached proxy', 'ok'); },
+            function () { set('fetch', 'Blocked', 'bad'); });
+  </script>
+</body>
+</html>
