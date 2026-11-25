@@ -1,0 +1,5 @@
+{
+  "title": "fetchLater Blocking",
+  "description": "Checks that Shields blocking rules apply to fetchLater() requests, both sent right away and deferred until the page unloads.",
+  "added": "2026-11-24"
+}

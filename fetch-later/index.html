@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>fetchLater Blocking</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    td.res { white-space: nowrap; }
+    code.url { word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>fetchLater Blocking</h1>
+
+  <div class="card">
+    <p>Blocked: <code class="url" id="blocked"></code><br>
+    Control: <code class="url" id="control"></code></p>
+    <p class="small muted">Reload to send the on unload requests.</p>
+    <button onclick="location.reload()">Reload</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Request</th><th>Blocked URL</th><th>Control</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="verdict" class="verdict"></p>
+  </div>
+
+  <script>
+    const BASE = 'https://test-website-b.pages.dev/fetch-later/beacon/';
+    const URLS = { blocked: BASE + 'stats', control: BASE + 'ok' };
+    const MODES = { fetch: 'fetch()', now: 'fetchLater({ activateAfter: 0 })', unload: 'fetchLater() on unload' };
+    const OPTS = { mode: 'no-cors', credentials: 'include', cache: 'no-store' };
+    const PENDING = 'fetch-later-pending';
+
+    const id = Date.now().toString(36);
+    const prev = sessionStorage.getItem(PENDING);
+    const cells = {};
+    const results = {};
+
+    document.getElementById('blocked').textContent = URLS.blocked;
+    document.getElementById('control').textContent = URLS.control;
+
+    for (const mode in MODES) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td><code></code></td><td class="res muted">...</td><td class="res muted">...</td>';
+      tr.cells[0].firstChild.textContent = MODES[mode];
+      cells[mode + '_blocked'] = tr.cells[1];
+      cells[mode + '_control'] = tr.cells[2];
+      document.getElementById('rows').appendChild(tr);
+    }
+
+    function set(key, result) {
+      const [text, cls] = {
+        sent: ['Sent', 'ok'],
+        blocked: ['Blocked', 'bad'],
+        error: ['Error', 'warn'],
+        skip: ['Reload', 'muted'],
+      }[result];
+      cells[key].textContent = text;
+      cells[key].className = 'res ' + cls;
+      results[key] = result;
+    }
+
+    function url(which, key) {
+      return URLS[which] + '?k=' + key;
+    }
+
+    async function waitCookie(key) {
+      for (let i = 0; i < 25; i++) {
+        if (document.cookie.split('; ').includes('fl_' + key + '=1')) return 'sent';
+        await new Promise(function (r) { setTimeout(r, 200); });
+      }
+      return 'blocked';
+    }
+
+    async function run() {
+      if (typeof window.fetchLater !== 'function') {
+        document.getElementById('verdict').textContent = 'fetchLater() is not supported.';
+        return;
+      }
+
+      const jobs = [];
+      for (const which of ['blocked', 'control']) {
+        jobs.push(fetch(url(which, id + '_fetch_' + which), OPTS)
+          .then(function () { set('fetch_' + which, 'sent'); },
+                function () { set('fetch_' + which, 'blocked'); }));
+
+        const nowKey = id + '_now_' + which;
+        try {
+          fetchLater(url(which, nowKey), Object.assign({ activateAfter: 0 }, OPTS));
+          jobs.push(waitCookie(nowKey).then(function (r) { set('now_' + which, r); }));
+        } catch (e) {
+          set('now_' + which, 'error');
+        }
+
+        if (prev) {
+          jobs.push(waitCookie(prev + '_unload_' + which)
+            .then(function (r) { set('unload_' + which, r); }));
+        } else {
+          set('unload_' + which, 'skip');
+        }
+
+        try {
+          fetchLater(url(which, id + '_unload_' + which), OPTS);
+        } catch (e) {}
+      }
+      sessionStorage.setItem(PENDING, id);
+
+      await Promise.all(jobs);
+
+      const verdict = document.getElementById('verdict');
+      const leaks = ['now', 'unload'].filter(function (m) { return results[m + '_blocked'] === 'sent'; });
+      if (results.fetch_blocked !== 'blocked') {
+        verdict.textContent = 'Inconclusive: Shields did not block fetch().';
+        verdict.className = 'verdict warn';
+      } else if (leaks.length) {
+        verdict.textContent = 'FAIL: fetchLater() was not blocked (' + leaks.join(', ') + ').';
+        verdict.className = 'verdict bad';
+      } else if (results.now_control !== 'sent' || (prev && results.unload_control !== 'sent')) {
+        verdict.textContent = 'Inconclusive: control fetchLater() was not sent.';
+        verdict.className = 'verdict warn';
+      } else {
+        verdict.textContent = prev ? 'PASS' : 'PASS so far; reload to check on unload.';
+        verdict.className = 'verdict ok';
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>
