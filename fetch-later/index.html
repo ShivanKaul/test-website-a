@@ -25,8 +25,7 @@
   </div>
 
   <script>
-    // /beacon/stats matches EasyPrivacy; /beacon/ok does not. Site B redirects
-    // both to site A's /fetch-later/hit, which sets a cookie when reached.
+    // /beacon/stats is on EasyPrivacy.
     const BASE = 'https://test-website-b.pages.dev/fetch-later/beacon/';
     const OPTS = { mode: 'no-cors', credentials: 'include', cache: 'no-store' };
     const PENDING = 'fetch-later-pending';
@@ -47,8 +46,6 @@
       return document.cookie.split('; ').includes('fl_' + key + '=1');
     }
 
-    // tracker/ok are the cookie keys for the blocked URL and the unblocked one.
-    // PASS once ok has arrived and tracker still hasn't 1s later.
     async function verdict(cell, tracker, ok) {
       const start = Date.now();
       let okAt = 0;
