@@ -60,9 +60,9 @@
     }
 
     async function run() {
-      const shieldsOn = await fetch(url('stats', id + '_fetch'), OPTS)
-        .then(function () { return false; }, function () { return true; });
-      set('fetch', shieldsOn ? 'PASS' : 'FAIL', shieldsOn ? 'ok' : 'bad');
+      fetch(url('stats', id + '_fetch'), OPTS)
+        .then(function () { set('fetch', 'FAIL', 'bad'); },
+              function () { set('fetch', 'PASS', 'ok'); });
 
       if (typeof window.fetchLater !== 'function') {
         set('now', 'Not supported', 'warn');
@@ -76,11 +76,6 @@
       }
       sessionStorage.setItem(PENDING, id);
 
-      if (!shieldsOn) {
-        set('now', 'Shields off', 'warn');
-        set('unload', 'Shields off', 'warn');
-        return;
-      }
       verdict('now', id + '_now_stats', id + '_now_ok');
       if (prev) verdict('unload', prev + '_unload_stats', prev + '_unload_ok');
       else set('unload', 'Reload to run', 'muted');
