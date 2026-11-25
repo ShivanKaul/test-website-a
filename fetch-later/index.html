@@ -43,20 +43,22 @@
       td.className = 'res ' + cls;
     }
 
-    async function arrived(key) {
-      for (let i = 0; i < 25; i++) {
-        if (document.cookie.split('; ').includes('fl_' + key + '=1')) return true;
-        await new Promise(function (r) { setTimeout(r, 200); });
-      }
-      return false;
+    function arrived(key) {
+      return document.cookie.split('; ').includes('fl_' + key + '=1');
     }
 
     // tracker/ok are the cookie keys for the blocked URL and the unblocked one.
+    // PASS once ok has arrived and tracker still hasn't 1s later.
     async function verdict(cell, tracker, ok) {
-      const [t, o] = await Promise.all([arrived(tracker), arrived(ok)]);
-      if (t) set(cell, 'FAIL', 'bad');
-      else if (o) set(cell, 'PASS', 'ok');
-      else set(cell, 'Inconclusive', 'warn');
+      const start = Date.now();
+      let okAt = 0;
+      while (Date.now() - start < 5000) {
+        if (arrived(tracker)) return set(cell, 'FAIL', 'bad');
+        if (!okAt && arrived(ok)) okAt = Date.now();
+        if (okAt && Date.now() - okAt >= 1000) return set(cell, 'PASS', 'ok');
+        await new Promise(function (r) { setTimeout(r, 100); });
+      }
+      set(cell, 'Inconclusive', 'warn');
     }
 
     async function run() {
