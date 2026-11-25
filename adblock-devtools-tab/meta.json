@@ -1,0 +1,5 @@
+{
+  "title": "DevTools Adblock Tab",
+  "description": "Sends requests that Brave's default filter lists block, allow by exception, or replace with a stub, to check what the Adblock tab in DevTools > Network shows for each.",
+  "added": "2026-11-25"
+}

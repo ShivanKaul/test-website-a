@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DevTools Adblock Tab</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    td.url { font-family: var(--font-mono); font-size: 0.85em; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>DevTools Adblock Tab</h1>
+
+  <div class="card">
+    <p>Sends requests that Brave's default filter lists block, allow, or stub, so
+    each one shows a different state in the Adblock tab of DevTools &gt; Network.</p>
+    <ol>
+      <li>Turn on Debug mode in <code>brave://adblock-internals</code> and restart
+      the browser. Without it, the tab can't show which rule matched.</li>
+      <li>Open DevTools, go to the Network tab, then click Send requests.</li>
+      <li>Click each request and open its Adblock tab.</li>
+    </ol>
+    <button onclick="run()">Send requests</button>
+    <p id="status" class="status"></p>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Request</th><th>Rule</th><th>Adblock tab shows</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="url">https://test-website-b.pages.dev/fetch-later/beacon/stats</td>
+          <td><code>/beacon/stats</code> (EasyPrivacy)</td>
+          <td><b>Blocked</b>, with the matched filter and its list.</td>
+        </tr>
+        <tr>
+          <td class="url">https://c.statcounter.com/robots.txt</td>
+          <td><code>||statcounter.com^$third-party</code> and the exception <code>@@||c.statcounter.com^$image,xhr</code></td>
+          <td><b>Allowed by exception</b>, with both the matched filter and the matched exception.</td>
+        </tr>
+        <tr>
+          <td class="url">https://www.google-analytics.com/analytics.js</td>
+          <td><code>.google-analytics.com/</code> (EasyPrivacy), with the stub from <code>||google-analytics.com/analytics.js$script,xhr,redirect=google-analytics_analytics.js:5</code></td>
+          <td><b>Blocked, replaced with a stub resource</b>, with <code>.google-analytics.com/</code> as the matched filter.</td>
+        </tr>
+        <tr>
+          <td class="url">https://pcoptimizedsettings.com/wp-content/plugins/koko-analytics/assets/dist/js/script.js</td>
+          <td><code>||pcoptimizedsettings.com/wp-content/plugins/koko-analytics/$important,redirect=noop.js,script</code></td>
+          <td><b>Blocked, replaced with a stub resource ($important rule)</b>.</td>
+        </tr>
+        <tr>
+          <td class="url">/styles.css on this site</td>
+          <td>None</td>
+          <td>No adblock rule blocked or allowed this request.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="muted">Each request with adblock info also shows a Blocking mode row:
+    Standard, or Aggressive if this site's Shields use aggressive blocking. With
+    Debug mode off, the first request shows a note to turn it on instead of the
+    matched filter.</p>
+  </div>
+
+  <script>
+    const OPTS = { mode: 'no-cors', cache: 'no-store' };
+
+    // The $important rule only applies to scripts, so it's loaded as one; the
+    // stub Brave serves for it does nothing.
+    function loadScript(src) {
+      return new Promise(function (resolve) {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = s.onerror = resolve;
+        document.head.append(s);
+      });
+    }
+
+    async function run() {
+      const status = document.getElementById('status');
+      status.textContent = 'Sending...';
+      const t = Date.now().toString(36);
+      const requests = [
+        fetch('https://test-website-b.pages.dev/fetch-later/beacon/stats?k=adblock_tab_' + t, OPTS),
+        fetch('https://c.statcounter.com/robots.txt?t=' + t, OPTS),
+        fetch('https://www.google-analytics.com/analytics.js?t=' + t, OPTS),
+        loadScript('https://pcoptimizedsettings.com/wp-content/plugins/koko-analytics/assets/dist/js/script.js?t=' + t),
+        fetch('/styles.css?t=' + t, OPTS),
+      ];
+      await Promise.allSettled(requests);
+      status.textContent = 'Sent. Check the Network tab.';
+    }
+  </script>
+</body>
+</html>
