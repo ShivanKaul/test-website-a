@@ -7,125 +7,81 @@
   <link rel="stylesheet" href="/styles.css" />
   <style>
     td.res { white-space: nowrap; }
-    code.url { word-break: break-all; }
   </style>
 </head>
 <body>
   <h1>fetchLater Blocking</h1>
 
   <div class="card">
-    <p>Blocked: <code class="url" id="blocked"></code><br>
-    Control: <code class="url" id="control"></code></p>
-    <p class="small muted">Reload to send the on unload requests.</p>
-    <button onclick="location.reload()">Reload</button>
-  </div>
-
-  <div class="card">
     <table>
-      <thead><tr><th>Request</th><th>Blocked URL</th><th>Control</th></tr></thead>
-      <tbody id="rows"></tbody>
+      <thead><tr><th>Test</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><code>fetchLater()</code> to a tracker is blocked</td><td class="res muted" id="now">...</td></tr>
+        <tr><td><code>fetchLater()</code> to a tracker on page unload is blocked</td><td class="res muted" id="unload">...</td></tr>
+      </tbody>
     </table>
-    <p id="verdict" class="verdict"></p>
+    <p><button onclick="location.reload()">Reload</button></p>
   </div>
 
   <script>
+    // /beacon/stats matches EasyPrivacy; /beacon/ok does not. Site B redirects
+    // both to site A's /fetch-later/hit, which sets a cookie when reached.
     const BASE = 'https://test-website-b.pages.dev/fetch-later/beacon/';
-    const URLS = { blocked: BASE + 'stats', control: BASE + 'ok' };
-    const MODES = { fetch: 'fetch()', now: 'fetchLater({ activateAfter: 0 })', unload: 'fetchLater() on unload' };
     const OPTS = { mode: 'no-cors', credentials: 'include', cache: 'no-store' };
     const PENDING = 'fetch-later-pending';
-
     const id = Date.now().toString(36);
     const prev = sessionStorage.getItem(PENDING);
-    const cells = {};
-    const results = {};
 
-    document.getElementById('blocked').textContent = URLS.blocked;
-    document.getElementById('control').textContent = URLS.control;
-
-    for (const mode in MODES) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td><code></code></td><td class="res muted">...</td><td class="res muted">...</td>';
-      tr.cells[0].firstChild.textContent = MODES[mode];
-      cells[mode + '_blocked'] = tr.cells[1];
-      cells[mode + '_control'] = tr.cells[2];
-      document.getElementById('rows').appendChild(tr);
+    function url(path, key) {
+      return BASE + path + '?k=' + key;
     }
 
-    function set(key, result) {
-      const [text, cls] = {
-        sent: ['Sent', 'ok'],
-        blocked: ['Blocked', 'bad'],
-        error: ['Error', 'warn'],
-        skip: ['Reload', 'muted'],
-      }[result];
-      cells[key].textContent = text;
-      cells[key].className = 'res ' + cls;
-      results[key] = result;
+    function set(cell, text, cls) {
+      const td = document.getElementById(cell);
+      td.textContent = text;
+      td.className = 'res ' + cls;
     }
 
-    function url(which, key) {
-      return URLS[which] + '?k=' + key;
-    }
-
-    async function waitCookie(key) {
+    async function arrived(key) {
       for (let i = 0; i < 25; i++) {
-        if (document.cookie.split('; ').includes('fl_' + key + '=1')) return 'sent';
+        if (document.cookie.split('; ').includes('fl_' + key + '=1')) return true;
         await new Promise(function (r) { setTimeout(r, 200); });
       }
-      return 'blocked';
+      return false;
+    }
+
+    // tracker/ok are the cookie keys for the blocked URL and the unblocked one.
+    async function verdict(cell, tracker, ok) {
+      const [t, o] = await Promise.all([arrived(tracker), arrived(ok)]);
+      if (t) set(cell, 'FAIL', 'bad');
+      else if (o) set(cell, 'PASS', 'ok');
+      else set(cell, 'Inconclusive', 'warn');
     }
 
     async function run() {
       if (typeof window.fetchLater !== 'function') {
-        document.getElementById('verdict').textContent = 'fetchLater() is not supported.';
+        set('now', 'Not supported', 'warn');
+        set('unload', 'Not supported', 'warn');
         return;
       }
 
-      const jobs = [];
-      for (const which of ['blocked', 'control']) {
-        jobs.push(fetch(url(which, id + '_fetch_' + which), OPTS)
-          .then(function () { set('fetch_' + which, 'sent'); },
-                function () { set('fetch_' + which, 'blocked'); }));
+      const shieldsOn = await fetch(url('stats', id + '_fetch'), OPTS)
+        .then(function () { return false; }, function () { return true; });
 
-        const nowKey = id + '_now_' + which;
-        try {
-          fetchLater(url(which, nowKey), Object.assign({ activateAfter: 0 }, OPTS));
-          jobs.push(waitCookie(nowKey).then(function (r) { set('now_' + which, r); }));
-        } catch (e) {
-          set('now_' + which, 'error');
-        }
-
-        if (prev) {
-          jobs.push(waitCookie(prev + '_unload_' + which)
-            .then(function (r) { set('unload_' + which, r); }));
-        } else {
-          set('unload_' + which, 'skip');
-        }
-
-        try {
-          fetchLater(url(which, id + '_unload_' + which), OPTS);
-        } catch (e) {}
+      for (const p of ['stats', 'ok']) {
+        fetchLater(url(p, id + '_now_' + p), Object.assign({ activateAfter: 0 }, OPTS));
+        fetchLater(url(p, id + '_unload_' + p), OPTS);
       }
       sessionStorage.setItem(PENDING, id);
 
-      await Promise.all(jobs);
-
-      const verdict = document.getElementById('verdict');
-      const leaks = ['now', 'unload'].filter(function (m) { return results[m + '_blocked'] === 'sent'; });
-      if (results.fetch_blocked !== 'blocked') {
-        verdict.textContent = 'Inconclusive: Shields did not block fetch().';
-        verdict.className = 'verdict warn';
-      } else if (leaks.length) {
-        verdict.textContent = 'FAIL: fetchLater() was not blocked (' + leaks.join(', ') + ').';
-        verdict.className = 'verdict bad';
-      } else if (results.now_control !== 'sent' || (prev && results.unload_control !== 'sent')) {
-        verdict.textContent = 'Inconclusive: control fetchLater() was not sent.';
-        verdict.className = 'verdict warn';
-      } else {
-        verdict.textContent = prev ? 'PASS' : 'PASS so far; reload to check on unload.';
-        verdict.className = 'verdict ok';
+      if (!shieldsOn) {
+        set('now', 'Shields off', 'warn');
+        set('unload', 'Shields off', 'warn');
+        return;
       }
+      verdict('now', id + '_now_stats', id + '_now_ok');
+      if (prev) verdict('unload', prev + '_unload_stats', prev + '_unload_ok');
+      else set('unload', 'Reload to run', 'muted');
     }
 
     run();
