@@ -16,6 +16,7 @@
     <table>
       <thead><tr><th>Test</th><th>Result</th></tr></thead>
       <tbody>
+        <tr><td><code>fetch()</code> to a tracker is blocked</td><td class="res muted" id="fetch">Running...</td></tr>
         <tr><td><code>fetchLater()</code> to a tracker is blocked</td><td class="res muted" id="now">Running...</td></tr>
         <tr><td><code>fetchLater()</code> to a tracker on page unload is blocked</td><td class="res muted" id="unload">Running...</td></tr>
       </tbody>
@@ -59,14 +60,15 @@
     }
 
     async function run() {
+      const shieldsOn = await fetch(url('stats', id + '_fetch'), OPTS)
+        .then(function () { return false; }, function () { return true; });
+      set('fetch', shieldsOn ? 'PASS' : 'FAIL', shieldsOn ? 'ok' : 'bad');
+
       if (typeof window.fetchLater !== 'function') {
         set('now', 'Not supported', 'warn');
         set('unload', 'Not supported', 'warn');
         return;
       }
-
-      const shieldsOn = await fetch(url('stats', id + '_fetch'), OPTS)
-        .then(function () { return false; }, function () { return true; });
 
       for (const p of ['stats', 'ok']) {
         fetchLater(url(p, id + '_now_' + p), Object.assign({ activateAfter: 0 }, OPTS));
