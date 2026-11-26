@@ -1,0 +1,5 @@
+{
+  "title": "DBSC Cross-Site Test",
+  "description": "Checks whether a DBSC identifier crosses site contexts.",
+  "added": "2026-11-25"
+}
