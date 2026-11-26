@@ -1,5 +1,5 @@
 {
-  "title": "DBSC Cross-Site Test",
-  "description": "Checks whether a DBSC identifier crosses site contexts.",
+  "title": "DBSC Cookie Test",
+  "description": "Compares a tracker ID when embedded and opened directly.",
   "added": "2026-11-25"
 }

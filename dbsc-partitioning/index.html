@@ -3,50 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DBSC cross-site test</title>
+  <title>DBSC cookie test</title>
   <link rel="stylesheet" href="/styles.css">
   <style>
-    body { max-width: 800px; }
-    iframe { width: 100%; height: 170px; border: 1px solid var(--line); border-radius: 8px; }
+    iframe {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      height: 155px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
   </style>
 </head>
 <body>
-  <h1>DBSC cross-site test</h1>
-  <p>Use a fresh profile for each sequence. Compare DBSC IDs; the ordinary
-  cookie should disappear.</p>
-  <ol>
-    <li><a href="?mode=seed">Seed B in A</a> →
-      <a href="https://test-website-b.pages.dev/dbsc-partitioning/observe">Check B</a></li>
-    <li><a href="https://test-website-b.pages.dev/dbsc-partitioning/seed">Seed B</a> →
-      <a href="?mode=observe">Check B in A</a></li>
-  </ol>
-  <section id="test" hidden>
-    <p id="phase"></p>
-    <iframe id="tracker" title="Website B test frame"></iframe>
-    <pre id="result" data-state="checking">Checking…</pre>
-  </section>
+  <h1>DBSC cookie test</h1>
+  <p>Site B is embedded below. When it finishes, open B directly and compare.</p>
+
+  <iframe id="site-b" title="Site B embedded in Site A"
+    src="https://test-website-b.pages.dev/dbsc-partitioning/seed"></iframe>
+
+  <p class="actions">
+    <a href="https://test-website-b.pages.dev/dbsc-partitioning/observe"
+      target="_blank" rel="noopener">Open Site B directly</a>
+    <button id="reset" type="button">Reset</button>
+  </p>
+  <p id="status" class="status" role="status"></p>
+
   <script>
     const B_ORIGIN = "https://test-website-b.pages.dev";
-    const selectedMode = new URLSearchParams(location.search).get("mode");
-    const mode = ["seed", "observe"].includes(selectedMode) ? selectedMode : null;
-    const frame = document.getElementById("tracker");
-    const result = document.getElementById("result");
-    if (mode) {
-      document.getElementById("test").hidden = false;
-      document.getElementById("phase").textContent = mode === "seed"
-        ? "B iframe: seed" : "B iframe: check";
-      frame.src = `${B_ORIGIN}/dbsc-partitioning/${mode}`;
-    }
+    const frame = document.getElementById("site-b");
+    const reset = document.getElementById("reset");
+    const status = document.getElementById("status");
+
+    reset.addEventListener("click", () => {
+      reset.disabled = true;
+      status.textContent = "Resetting…";
+      frame.src = `${B_ORIGIN}/dbsc-partitioning/reset`;
+    });
+
     window.addEventListener("message", event => {
-      if (event.origin !== B_ORIGIN || event.source !== frame.contentWindow) return;
-      const data = event.data;
-      if (!data || data.type !== "dbsc-probe" || data.mode !== mode) return;
-      result.dataset.state = data.done ? "done" : "checking";
-      result.dataset.dbsc = data.dbsc || "";
-      result.dataset.ordinary = data.ordinary || "";
-      result.textContent = data.error
-        ? data.error
-        : `DBSC: ${data.dbsc || "absent"}\nCookie: ${data.ordinary || "absent"}`;
+      if (event.origin !== B_ORIGIN || event.source !== frame.contentWindow ||
+          event.data?.type !== "dbsc-reset-complete") return;
+      location.replace(`${B_ORIGIN}/dbsc-partitioning/reset`);
     });
   </script>
 </body>
